@@ -172,13 +172,19 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Valor total (R$)</label>
+          <label id="instAmountLabel">Valor da parcela (R$)</label>
           <input type="number" id="instAmount" step="0.01" min="0.01" required>
         </div>
         <div class="field">
           <label>Parcelas</label>
           <input type="number" id="instCount" min="2" max="60" value="2" required>
         </div>
+      </div>
+      <div class="field">
+        <label class="checkbox-field">
+          <input type="checkbox" id="instIsTotal">
+          Informei o valor total (dividir pelas parcelas)
+        </label>
       </div>
       <div class="field-row">
         <div class="field">
@@ -226,6 +232,7 @@
     <p id="confirmMessage" class="confirm-message"></p>
     <div class="modal-actions">
       <button type="button" class="btn btn-outline btn-block" id="confirmNo">Cancelar</button>
+      <button type="button" class="btn btn-outline btn-block" id="confirmExtra" style="display:none">Extra</button>
       <button type="button" class="btn btn-danger btn-block" id="confirmYes">Confirmar</button>
     </div>
   </div>
@@ -354,13 +361,19 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Valor total (R$)</label>
+          <label id="purchaseAmountLabel">Valor da parcela (R$)</label>
           <input type="number" id="purchaseAmount" step="0.01" min="0.01" required>
         </div>
         <div class="field">
           <label>Parcelas</label>
           <input type="number" id="purchaseCount" min="1" max="60" value="1" required>
         </div>
+      </div>
+      <div class="field">
+        <label class="checkbox-field">
+          <input type="checkbox" id="purchaseIsTotal">
+          Informei o valor total (dividir pelas parcelas)
+        </label>
       </div>
       <div class="field-row">
         <div class="field">

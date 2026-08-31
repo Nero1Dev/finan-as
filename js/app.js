@@ -612,8 +612,13 @@ async function payInvoice(invoice, card) {
 document.getElementById("openCardPurchase").addEventListener("click", () => {
   document.getElementById("cardPurchaseForm").reset();
   document.getElementById("purchaseDate").value = toISODate(new Date());
+  document.getElementById("purchaseAmountLabel").textContent = "Valor da parcela (R$)";
   fillCategorySelect("purchaseCategory", "despesa");
   openModal("cardPurchaseModalOverlay");
+});
+
+document.getElementById("purchaseIsTotal").addEventListener("change", (e) => {
+  document.getElementById("purchaseAmountLabel").textContent = e.target.checked ? "Valor total (R$)" : "Valor da parcela (R$)";
 });
 
 document.getElementById("cardPurchaseForm").addEventListener("submit", async (e) => {
@@ -623,14 +628,13 @@ document.getElementById("cardPurchaseForm").addEventListener("submit", async (e)
   if (!card) return;
 
   const desc = document.getElementById("purchaseDesc").value.trim();
-  const total = Number(document.getElementById("purchaseAmount").value);
+  const amountInput = Number(document.getElementById("purchaseAmount").value);
   const count = Number(document.getElementById("purchaseCount").value);
+  const isTotal = document.getElementById("purchaseIsTotal").checked;
   const firstDate = new Date(document.getElementById("purchaseDate").value + "T12:00:00");
   const categoryId = document.getElementById("purchaseCategory").value;
   const groupId = count > 1 ? crypto.randomUUID() : null;
-
-  const base = Math.floor((total / count) * 100) / 100;
-  const remainder = Math.round((total - base * count) * 100) / 100;
+  const amounts = installmentAmounts(amountInput, count, isTotal);
 
   let { year, month0 } = invoiceReferenceMonth(firstDate, card.closing_day);
   const rows = [];
@@ -640,7 +644,7 @@ document.getElementById("cardPurchaseForm").addEventListener("submit", async (e)
     const d = addMonthsClamped(firstDate, i);
     rows.push({
       description: desc,
-      amount: i === count - 1 ? Math.round((base + remainder) * 100) / 100 : base,
+      amount: amounts[i],
       kind: "despesa",
       date: toISODate(d),
       account_id: card.payment_account_id,
@@ -719,25 +723,37 @@ function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
 
 // ---------- CONFIRMAÇÃO (substitui window.confirm) ----------
-function confirmDialog(message, title = "Confirmar") {
+// Retorna true (confirmou), false (cancelou) ou "extra" (clicou no botão extra).
+function confirmDialog(message, title = "Confirmar", { yesLabel = "Confirmar", extraLabel = null } = {}) {
   return new Promise((resolve) => {
     document.getElementById("confirmTitle").textContent = title;
     document.getElementById("confirmMessage").textContent = message;
     const yesBtn = document.getElementById("confirmYes");
     const noBtn = document.getElementById("confirmNo");
+    const extraBtn = document.getElementById("confirmExtra");
     const overlay = document.getElementById("confirmModalOverlay");
+    yesBtn.textContent = yesLabel;
+    if (extraLabel) {
+      extraBtn.textContent = extraLabel;
+      extraBtn.style.display = "";
+    } else {
+      extraBtn.style.display = "none";
+    }
     function cleanup(result) {
       overlay.classList.remove("open");
       yesBtn.removeEventListener("click", onYes);
       noBtn.removeEventListener("click", onNo);
+      extraBtn.removeEventListener("click", onExtra);
       overlay.removeEventListener("click", onOverlay);
       resolve(result);
     }
     function onYes() { cleanup(true); }
     function onNo() { cleanup(false); }
+    function onExtra() { cleanup("extra"); }
     function onOverlay(e) { if (e.target === overlay) cleanup(false); }
     yesBtn.addEventListener("click", onYes);
     noBtn.addEventListener("click", onNo);
+    extraBtn.addEventListener("click", onExtra);
     overlay.addEventListener("click", onOverlay);
     overlay.classList.add("open");
   });
@@ -818,32 +834,47 @@ document.getElementById("addValueForm").addEventListener("submit", async (e) => 
   await refreshMonth();
 });
 
+// dado o valor digitado, decide se ele já é o valor de cada parcela ou se
+// precisa ser dividido (com o resto da divisão jogado na última parcela)
+function installmentAmounts(amountInput, count, isTotal) {
+  if (!isTotal) return Array(count).fill(Math.round(amountInput * 100) / 100);
+  const base = Math.floor((amountInput / count) * 100) / 100;
+  const remainder = Math.round((amountInput - base * count) * 100) / 100;
+  const amounts = Array(count).fill(base);
+  amounts[count - 1] = Math.round((base + remainder) * 100) / 100;
+  return amounts;
+}
+
 // ---------- PARCELADO ----------
 document.getElementById("openInstallment").addEventListener("click", () => {
   document.getElementById("installmentForm").reset();
   document.getElementById("instDate").value = toISODate(new Date());
+  document.getElementById("instAmountLabel").textContent = "Valor da parcela (R$)";
   openModal("installmentModalOverlay");
+});
+
+document.getElementById("instIsTotal").addEventListener("change", (e) => {
+  document.getElementById("instAmountLabel").textContent = e.target.checked ? "Valor total (R$)" : "Valor da parcela (R$)";
 });
 
 document.getElementById("installmentForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const desc = document.getElementById("instDesc").value.trim();
-  const total = Number(document.getElementById("instAmount").value);
+  const amountInput = Number(document.getElementById("instAmount").value);
   const count = Number(document.getElementById("instCount").value);
+  const isTotal = document.getElementById("instIsTotal").checked;
   const firstDate = new Date(document.getElementById("instDate").value + "T12:00:00");
   const accountId = document.getElementById("instAccount").value;
   const categoryId = document.getElementById("instCategory").value;
   const groupId = crypto.randomUUID();
-
-  const base = Math.floor((total / count) * 100) / 100;
-  const remainder = Math.round((total - base * count) * 100) / 100;
+  const amounts = installmentAmounts(amountInput, count, isTotal);
 
   const rows = [];
   for (let i = 0; i < count; i++) {
     const d = addMonthsClamped(firstDate, i);
     rows.push({
       description: desc,
-      amount: i === count - 1 ? Math.round((base + remainder) * 100) / 100 : base,
+      amount: amounts[i],
       kind: "despesa",
       date: toISODate(d),
       account_id: accountId,
@@ -963,14 +994,30 @@ async function deleteRecurring(r) {
 
 // ---------- EXCLUIR LANÇAMENTO ----------
 async function deleteTransaction(t) {
-  if (t.installment_total && !(await confirmDialog(`Esta é a parcela ${t.installment_number}/${t.installment_total}. Excluir só esta parcela?`, "Excluir parcela"))) return;
-  if (!t.installment_total && !(await confirmDialog(`Excluir "${t.description}"?`, "Excluir lançamento"))) return;
+  if (t.installment_total) {
+    const choice = await confirmDialog(
+      `Esta é a parcela ${t.installment_number}/${t.installment_total} de "${t.description}".`,
+      "Excluir parcela",
+      { yesLabel: "Só esta parcela", extraLabel: `Todas as ${t.installment_total} parcelas` }
+    );
+    if (!choice) return;
+    const query = choice === "extra"
+      ? supabase.from("transactions").delete().eq("installment_group", t.installment_group)
+      : supabase.from("transactions").delete().eq("id", t.id);
+    const { error } = await mutate(query);
+    if (error) return;
+    if (t.invoice_id) {
+      cardTransactions = choice === "extra"
+        ? cardTransactions.filter((x) => x.installment_group !== t.installment_group)
+        : cardTransactions.filter((x) => x.id !== t.id);
+      renderCardsGrid();
+    }
+    await refreshMonth();
+    return;
+  }
+  if (!(await confirmDialog(`Excluir "${t.description}"?`, "Excluir lançamento"))) return;
   const { error } = await mutate(supabase.from("transactions").delete().eq("id", t.id));
   if (error) return;
-  if (t.invoice_id) {
-    cardTransactions = cardTransactions.filter((x) => x.id !== t.id);
-    renderCardsGrid();
-  }
   await refreshMonth();
 }
 
