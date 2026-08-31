@@ -37,11 +37,16 @@ wireToggle(toggleConfirmBtn, confirmInput);
 // ---------- FORÇA DA SENHA ----------
 function passwordStrength(pw) {
   let score = 0;
-  if (pw.length >= 6) score++;
-  if (pw.length >= 10) score++;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
   if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
   if (/\d/.test(pw) && /[^A-Za-z0-9]/.test(pw)) score++;
   return Math.min(score, 4);
+}
+
+// mesma regra exigida no Supabase: minimo 8, com minuscula + maiuscula + numero
+function passwordMeetsPolicy(pw) {
+  return pw.length >= 8 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /\d/.test(pw);
 }
 const STRENGTH_LABELS = ["", "Fraca", "Razoável", "Boa", "Forte"];
 
@@ -138,6 +143,10 @@ form.addEventListener("submit", async (e) => {
       showMsg("Usuário deve ter de 3 a 20 letras, números ou _.");
       return;
     }
+    if (!passwordMeetsPolicy(password)) {
+      showMsg("A senha precisa ter no mínimo 8 caracteres, com letra maiúscula, minúscula e número.");
+      return;
+    }
     if (password !== confirmInput.value) {
       showMsg("As senhas não coincidem.");
       confirmInput.classList.add("mismatch");
@@ -185,7 +194,8 @@ form.addEventListener("submit", async (e) => {
 function traduzErro(m) {
   if (/invalid login credentials/i.test(m)) return "Usuário/e-mail ou senha incorretos.";
   if (/user already registered/i.test(m)) return "Este e-mail já tem conta. Faça login.";
-  if (/password should be at least/i.test(m)) return "A senha precisa ter pelo menos 6 caracteres.";
+  if (/password should be at least/i.test(m)) return "A senha precisa ter pelo menos 8 caracteres.";
+  if (/should contain at least one character of each/i.test(m)) return "A senha precisa ter letra maiúscula, minúscula e número.";
   if (/duplicate key value/i.test(m)) return "Esse nome de usuário já está em uso.";
   if (/email address .* is invalid/i.test(m)) return "Esse e-mail não é válido.";
   return m;
