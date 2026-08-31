@@ -8,6 +8,8 @@ dispositivo em que você fizer login — não dependem do navegador local.
 
 - Login por e-mail **ou nome de usuário** + senha (até você + 1 pessoa), com
   mostrar/ocultar senha, barra de força e confirmação de senha no cadastro
+- Cada login enxerga só as próprias contas e lançamentos — é para
+  acompanhamento individual, não um financeiro compartilhado entre os dois
 - Contas e cartões múltiplos, com saldo por conta
 - Lançamento de receitas e despesas
 - Despesas parceladas (ex: "Notebook, 10x") — gera as parcelas automaticamente
@@ -82,12 +84,21 @@ js/supabaseClient.js → configuração de conexão com o Supabase (preencher)
 js/auth.js          → lógica de login/cadastro
 js/app.js           → lógica do painel (CRUD, saldo, parcelas, fixas)
 sql/schema.sql       → script para criar o banco de dados no Supabase
+sql/migration_contas_individuais.sql → migração para projetos já existentes
+                        (só necessário se você rodou o schema.sql antigo)
 ```
 
-## Observação sobre "compartilhado"
+## Observação sobre "individual"
 
-Como você disse que serão no máximo 2 pessoas usando, o modelo aqui é de
-**financeiro compartilhado**: qualquer um dos 2 logins vê e edita as mesmas contas
-e lançamentos (não é uma área separada por pessoa). Se depois você preferir que
-cada um veja só o que lançou, é uma mudança pontual nas regras de segurança do
-banco — é só pedir.
+Cada um dos 2 logins tem suas próprias contas, cartões, despesas fixas e
+lançamentos — um não vê nem edita o que o outro cadastrou. Isso é garantido
+pelas regras de segurança (RLS) do banco, não só pela tela: mesmo se alguém
+tentasse acessar os dados direto pela API do Supabase, o banco bloqueia.
+As categorias (Moradia, Alimentação, etc.) são a única coisa compartilhada
+entre os dois — é só uma lista de referência, sem valores.
+
+Se você já tinha criado o projeto Supabase com uma versão anterior deste
+schema (modelo compartilhado), rode `sql/migration_contas_individuais.sql`
+no SQL Editor para migrar sem perder os dados existentes — leia os
+comentários do arquivo antes de rodar, pois um passo pede pra você decidir
+o dono das contas já cadastradas.

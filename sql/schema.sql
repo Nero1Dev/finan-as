@@ -5,9 +5,10 @@
 
 create extension if not exists "pgcrypto";
 
--- Contas e cartões
+-- Contas e cartões (cada um pertence a um único login)
 create table if not exists accounts (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name text not null,
   type text not null check (type in ('corrente','poupanca','cartao','dinheiro','investimento')),
   color text default '#C99A44',
@@ -35,7 +36,7 @@ create table if not exists recurring_expenses (
   start_date date not null default current_date,
   end_date date,
   active boolean not null default true,
-  created_by uuid references auth.users(id),
+  created_by uuid not null default auth.uid() references auth.users(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
@@ -54,7 +55,7 @@ create table if not exists transactions (
   recurring_id uuid references recurring_expenses(id) on delete set null,
   recurring_month text,
   paid boolean not null default true,
-  created_by uuid references auth.users(id),
+  created_by uuid not null default auth.uid() references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
   unique (recurring_id, recurring_month)
 );
@@ -64,8 +65,10 @@ create index if not exists idx_transactions_account on transactions(account_id);
 create index if not exists idx_transactions_group on transactions(installment_group);
 
 -- ============================================================
--- RLS — só usuários autenticados (você + a segunda pessoa) acessam,
--- e todos veem os mesmos dados (financeiro compartilhado).
+-- RLS — só usuários autenticados (você + a segunda pessoa) acessam.
+-- Cada login só vê e edita suas PRÓPRIAS contas, despesas fixas e
+-- lançamentos (financeiro individual, não compartilhado). As categorias
+-- continuam sendo uma lista de referência única, usada pelos dois.
 -- IMPORTANTE: depois de criar as 2 contas, vá em Authentication > Providers
 -- e desative "Allow new users to sign up" para ninguém mais se cadastrar.
 -- ============================================================
@@ -75,17 +78,17 @@ alter table categories enable row level security;
 alter table recurring_expenses enable row level security;
 alter table transactions enable row level security;
 
-create policy "auth full access" on accounts
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-
 create policy "auth full access" on categories
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
-create policy "auth full access" on recurring_expenses
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "dono ve e edita suas contas" on accounts
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-create policy "auth full access" on transactions
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "dono ve e edita suas despesas fixas" on recurring_expenses
+  for all using (auth.uid() = created_by) with check (auth.uid() = created_by);
+
+create policy "dono ve e edita seus lancamentos" on transactions
+  for all using (auth.uid() = created_by) with check (auth.uid() = created_by);
 
 -- Categorias padrão
 -- Perfis (associa um nome de usuário único a cada login, permite

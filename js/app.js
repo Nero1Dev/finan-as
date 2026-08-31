@@ -642,7 +642,7 @@ document.getElementById("accountForm").addEventListener("submit", async (e) => {
   };
   const { error } = id
     ? await mutate(supabase.from("accounts").update(row).eq("id", id))
-    : await mutate(supabase.from("accounts").insert(row));
+    : await mutate(supabase.from("accounts").insert({ ...row, user_id: user.id }));
   if (error) return;
   closeModal("accountModalOverlay");
   await loadStaticData();
