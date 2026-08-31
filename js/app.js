@@ -693,6 +693,7 @@ document.getElementById("recurringForm").addEventListener("submit", async (e) =>
   if (error) return;
   closeModal("recurringModalOverlay");
   await loadStaticData();
+  renderRecurringGrid();
   await ensureRecurringForVisibleMonth();
   await refreshMonth();
 });
