@@ -5,12 +5,13 @@
 
 create extension if not exists "pgcrypto";
 
--- Contas e cartões (cada um pertence a um único login)
+-- Contas (cada uma pertence a um único login). Cartão de crédito NÃO é uma
+-- conta com saldo — veja as tabelas "cards" e "invoices" mais abaixo.
 create table if not exists accounts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name text not null,
-  type text not null check (type in ('corrente','poupanca','cartao','dinheiro','investimento')),
+  type text not null check (type in ('corrente','poupanca','dinheiro','investimento')),
   color text default '#C99A44',
   archived boolean not null default false,
   created_at timestamptz not null default now()
@@ -23,6 +24,34 @@ create table if not exists categories (
   kind text not null check (kind in ('receita','despesa')),
   color text default '#7C3220',
   created_at timestamptz not null default now()
+);
+
+-- Cartões de crédito (não têm saldo — geram faturas mensais)
+create table if not exists cards (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null,
+  brand text,
+  limit_amount numeric(12,2),
+  closing_day int not null check (closing_day between 1 and 28),
+  due_day int not null check (due_day between 1 and 28),
+  payment_account_id uuid references accounts(id) on delete set null,
+  archived boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- Faturas do cartão (uma por ciclo mensal). Total/status são calculados
+-- a partir das compras (transactions) vinculadas — não ficam guardados
+-- aqui, pra nunca dessincronizar.
+create table if not exists invoices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  card_id uuid not null references cards(id) on delete cascade,
+  reference_month text not null,
+  closing_date date not null,
+  due_date date not null,
+  created_at timestamptz not null default now(),
+  unique (card_id, reference_month)
 );
 
 -- Despesas fixas mensais (modelo — gera lançamentos em "transactions")
@@ -54,6 +83,8 @@ create table if not exists transactions (
   installment_group uuid,
   recurring_id uuid references recurring_expenses(id) on delete set null,
   recurring_month text,
+  card_id uuid references cards(id) on delete set null,
+  invoice_id uuid references invoices(id) on delete set null,
   paid boolean not null default true,
   created_by uuid not null default auth.uid() references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -63,6 +94,7 @@ create table if not exists transactions (
 create index if not exists idx_transactions_date on transactions(date);
 create index if not exists idx_transactions_account on transactions(account_id);
 create index if not exists idx_transactions_group on transactions(installment_group);
+create index if not exists idx_transactions_invoice on transactions(invoice_id);
 
 -- ============================================================
 -- RLS — só usuários autenticados (você + a segunda pessoa) acessam.
@@ -75,6 +107,8 @@ create index if not exists idx_transactions_group on transactions(installment_gr
 
 alter table accounts enable row level security;
 alter table categories enable row level security;
+alter table cards enable row level security;
+alter table invoices enable row level security;
 alter table recurring_expenses enable row level security;
 alter table transactions enable row level security;
 
@@ -82,6 +116,12 @@ create policy "auth full access" on categories
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 create policy "dono ve e edita suas contas" on accounts
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "dono ve e edita seus cartoes" on cards
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "dono ve e edita suas faturas" on invoices
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "dono ve e edita suas despesas fixas" on recurring_expenses

@@ -34,7 +34,8 @@
   <div class="tabs">
     <button class="tab active" data-tab="dashboard">Lançamentos</button>
     <button class="tab" data-tab="graficos">Gráficos</button>
-    <button class="tab" data-tab="contas">Contas &amp; Cartões</button>
+    <button class="tab" data-tab="contas">Contas</button>
+    <button class="tab" data-tab="cartoes">Cartões</button>
     <button class="tab" data-tab="fixas">Despesas Fixas</button>
   </div>
 
@@ -88,10 +89,22 @@
     <div class="action-bar">
       <div></div>
       <div class="actions">
-        <button class="btn btn-primary" id="openAccount">+ Conta / Cartão</button>
+        <button class="btn btn-primary" id="openAccount">+ Conta</button>
       </div>
     </div>
     <div class="item-grid" id="accountsGrid"></div>
+  </section>
+
+  <!-- ===== TAB: CARTÕES ===== -->
+  <section id="tab-cartoes" style="display:none">
+    <div class="action-bar">
+      <div></div>
+      <div class="actions">
+        <button class="btn btn-outline" id="openCardPurchase">+ Compra no Cartão</button>
+        <button class="btn btn-primary" id="openCard">+ Cartão</button>
+      </div>
+    </div>
+    <div class="item-grid" id="cardsGrid"></div>
   </section>
 
   <!-- ===== TAB: FIXAS ===== -->
@@ -222,19 +235,18 @@
 <div class="modal-overlay" id="accountModalOverlay">
   <div class="modal">
     <button class="modal-close" data-close>&times;</button>
-    <h2>Conta / Cartão</h2>
+    <h2>Conta</h2>
     <form id="accountForm">
       <input type="hidden" id="accountId">
       <div class="field">
         <label>Nome</label>
-        <input type="text" id="accountName" required placeholder="Ex: Nubank, Carteira, Cartão Inter">
+        <input type="text" id="accountName" required placeholder="Ex: Nubank, Carteira, Poupança">
       </div>
       <div class="field">
         <label>Tipo</label>
         <select id="accountType" required>
           <option value="corrente">Conta corrente</option>
           <option value="poupanca">Poupança</option>
-          <option value="cartao">Cartão de crédito</option>
           <option value="dinheiro">Dinheiro</option>
           <option value="investimento">Investimento</option>
         </select>
@@ -275,6 +287,89 @@
         <div class="field">
           <label>Categoria</label>
           <select id="recCategory" required></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary btn-block">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MODAL: CARTÃO ===== -->
+<div class="modal-overlay" id="cardModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2 id="cardModalTitle">Cartão de Crédito</h2>
+    <form id="cardForm">
+      <input type="hidden" id="cardId" value="">
+      <div class="field">
+        <label>Nome</label>
+        <input type="text" id="cardName" required placeholder="Ex: Nubank, Inter">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Bandeira</label>
+          <input type="text" id="cardBrand" placeholder="Ex: Visa, Mastercard">
+        </div>
+        <div class="field">
+          <label>Limite (R$)</label>
+          <input type="number" id="cardLimit" step="0.01" min="0" placeholder="opcional">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Dia de fechamento</label>
+          <input type="number" id="cardClosingDay" min="1" max="28" value="25" required>
+        </div>
+        <div class="field">
+          <label>Dia de vencimento</label>
+          <input type="number" id="cardDueDay" min="1" max="28" value="5" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Conta usada para pagar a fatura</label>
+        <select id="cardPaymentAccount" required></select>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary btn-block">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MODAL: COMPRA NO CARTÃO ===== -->
+<div class="modal-overlay" id="cardPurchaseModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2>Compra no Cartão</h2>
+    <form id="cardPurchaseForm">
+      <div class="field">
+        <label>Cartão</label>
+        <select id="purchaseCard" required></select>
+      </div>
+      <div class="field">
+        <label>Descrição</label>
+        <input type="text" id="purchaseDesc" required placeholder="Ex: Notebook, Supermercado">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Valor total (R$)</label>
+          <input type="number" id="purchaseAmount" step="0.01" min="0.01" required>
+        </div>
+        <div class="field">
+          <label>Parcelas</label>
+          <input type="number" id="purchaseCount" min="1" max="60" value="1" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Data da compra</label>
+          <input type="date" id="purchaseDate" required>
+        </div>
+        <div class="field">
+          <label>Categoria</label>
+          <select id="purchaseCategory" required></select>
         </div>
       </div>
       <div class="modal-actions">

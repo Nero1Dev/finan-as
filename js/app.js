@@ -31,6 +31,9 @@ let user = null;
 let accounts = [];
 let categories = [];
 let recurring = [];
+let cards = [];
+let invoices = [];
+let cardTransactions = []; // todos os lançamentos vinculados a algum cartão, de qualquer mês
 let transactions = []; // do mês atual
 let viewDate = new Date(); // dia 1 = mês em foco
 viewDate.setDate(1);
@@ -61,14 +64,20 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 
 // ---------- DATA LOADING ----------
 async function loadStaticData() {
-  const [accRes, catRes, recRes] = await Promise.all([
+  const [accRes, catRes, recRes, cardRes, invRes, cardTxRes] = await Promise.all([
     supabase.from("accounts").select("*").eq("archived", false).order("created_at"),
     supabase.from("categories").select("*").order("name"),
     supabase.from("recurring_expenses").select("*").order("created_at"),
+    supabase.from("cards").select("*").eq("archived", false).order("created_at"),
+    supabase.from("invoices").select("*"),
+    supabase.from("transactions").select("*").not("card_id", "is", null),
   ]);
   accounts = accRes.data || [];
   categories = catRes.data || [];
   recurring = recRes.data || [];
+  cards = cardRes.data || [];
+  invoices = invRes.data || [];
+  cardTransactions = cardTxRes.data || [];
 }
 
 function monthBounds(date) {
@@ -138,6 +147,7 @@ function renderAll() {
   renderTxList();
   renderDonut();
   renderAccountsGrid();
+  renderCardsGrid();
   renderRecurringGrid();
   fillSelects();
 }
@@ -334,6 +344,7 @@ function renderTxList() {
 
 function txRow(t) {
   const acc = accounts.find((a) => a.id === t.account_id);
+  const card = t.card_id ? cards.find((c) => c.id === t.card_id) : null;
   const cat = categories.find((c) => c.id === t.category_id);
   const row = document.createElement("div");
   row.className = "tx-row" + (t.paid === false ? " pending" : "");
@@ -341,18 +352,21 @@ function txRow(t) {
     ? `<span class="badge">${t.installment_number}/${t.installment_total}</span>`
     : t.recurring_id
       ? `<span class="badge">FIXA</span>`
-      : "";
-  const canAddValue = t.kind === "despesa" && !t.installment_total && !t.recurring_id;
+      : t.card_id
+        ? `<span class="badge">CARTÃO</span>`
+        : "";
+  const canAddValue = t.kind === "despesa" && !t.installment_total && !t.recurring_id && !t.card_id;
   const canTogglePaid = t.kind === "despesa";
 
   const paidPill = canTogglePaid
     ? `<button class="paid-pill ${t.paid ? "paid" : "pending"}" data-toggle-paid>${t.paid ? "PAGO" : "PENDENTE"}</button>`
     : "";
   const addBtn = canAddValue ? `<button title="Adicionar valor" data-add>+</button>` : "";
+  const originLabel = card ? `${card.name} (cartão)` : (acc?.name || "—");
 
   row.innerHTML = `
     <div class="desc">${escapeHtml(t.description)}${badge}</div>
-    <div class="meta">${escapeHtml(acc?.name || "—")} · ${escapeHtml(cat?.name || "—")} ${paidPill}</div>
+    <div class="meta">${escapeHtml(originLabel)} · ${escapeHtml(cat?.name || "—")} ${paidPill}</div>
     <div class="amount ${t.kind}">${t.kind === "despesa" ? "-" : "+"}${currency.format(t.amount)}</div>
     <div class="row-actions">${addBtn}<button title="Editar" data-edit>✎</button><button title="Excluir" data-del>✕</button></div>`;
   row.querySelector("[data-del]").addEventListener("click", () => deleteTransaction(t));
@@ -363,8 +377,14 @@ function txRow(t) {
 }
 
 async function togglePaid(t) {
-  const { error } = await mutate(supabase.from("transactions").update({ paid: !t.paid }).eq("id", t.id));
+  const newPaid = !t.paid;
+  const { error } = await mutate(supabase.from("transactions").update({ paid: newPaid }).eq("id", t.id));
   if (error) return;
+  if (t.invoice_id) {
+    const ct = cardTransactions.find((x) => x.id === t.id);
+    if (ct) ct.paid = newPaid;
+    renderCardsGrid();
+  }
   await refreshMonth();
 }
 
@@ -392,7 +412,7 @@ function renderAccountsGrid() {
 }
 
 function typeLabel(t) {
-  return { corrente: "Conta corrente", poupanca: "Poupança", cartao: "Cartão de crédito", dinheiro: "Dinheiro", investimento: "Investimento" }[t] || t;
+  return { corrente: "Conta corrente", poupanca: "Poupança", dinheiro: "Dinheiro", investimento: "Investimento" }[t] || t;
 }
 
 function renderRecurringGrid() {
@@ -422,14 +442,242 @@ function renderRecurringGrid() {
   }
 }
 
+// ---------- CARTÕES / FATURAS ----------
+function renderCardsGrid() {
+  const grid = document.getElementById("cardsGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  if (cards.length === 0) {
+    grid.innerHTML = `<div class="empty-state">Nenhum cartão cadastrado ainda.</div>`;
+    return;
+  }
+  for (const card of cards) {
+    const cardInvoices = invoices.filter((i) => i.card_id === card.id);
+    const unpaidInvoices = cardInvoices
+      .filter((i) => cardTransactions.some((t) => t.invoice_id === i.id && !t.paid))
+      .sort((a, b) => (a.reference_month < b.reference_month ? -1 : 1)); // mais próxima primeiro
+    const latestInvoice = cardInvoices
+      .slice()
+      .sort((a, b) => (a.reference_month < b.reference_month ? 1 : -1))[0]; // mais recente primeiro
+    const openInvoice = unpaidInvoices[0] || latestInvoice;
+
+    let totalLabel = "Sem compras ainda";
+    let statusLabel = "";
+    let dueLabel = "";
+    let hasUnpaid = false;
+    if (openInvoice) {
+      const txs = cardTransactions.filter((t) => t.invoice_id === openInvoice.id);
+      const total = txs.reduce((s, t) => s + Number(t.amount), 0);
+      hasUnpaid = txs.some((t) => !t.paid);
+      const allPaid = txs.length > 0 && txs.every((t) => t.paid);
+      const somePaid = txs.some((t) => t.paid);
+      const status = allPaid ? "PAGA" : somePaid ? "PARCIAL" : "ABERTA";
+      const refLabel = monthFmt.format(new Date(openInvoice.reference_month + "-01T12:00:00")).toUpperCase();
+      totalLabel = currency.format(total);
+      statusLabel = `${refLabel} · ${status}`;
+      dueLabel = `Vence em ${new Date(openInvoice.due_date + "T12:00:00").toLocaleDateString("pt-BR")}`;
+    }
+
+    const payAcc = accounts.find((a) => a.id === card.payment_account_id);
+    const el = document.createElement("div");
+    el.className = "item-card";
+    el.innerHTML = `
+      <div class="name">${escapeHtml(card.name)}${card.brand ? ` · ${escapeHtml(card.brand)}` : ""}</div>
+      <div class="type mono">${escapeHtml(statusLabel || "Sem fatura ainda")}${dueLabel ? " · " + escapeHtml(dueLabel) : ""}</div>
+      <div class="balance" style="color:var(--gold)">${totalLabel}</div>
+      <div class="type mono">Pago pela conta: ${escapeHtml(payAcc?.name || "—")}</div>
+      <div class="card-actions">
+        ${hasUnpaid ? `<button class="btn btn-outline" data-pay>Pagar fatura</button>` : ""}
+        <button class="btn btn-outline" data-edit>Editar</button>
+        <button class="btn btn-danger" data-del>Arquivar</button>
+      </div>`;
+    el.querySelector("[data-edit]").addEventListener("click", () => openCardModal(card));
+    el.querySelector("[data-del]").addEventListener("click", () => archiveCard(card));
+    if (hasUnpaid) el.querySelector("[data-pay]").addEventListener("click", () => payInvoice(openInvoice, card));
+    grid.appendChild(el);
+  }
+}
+
+function openCardModal(card) {
+  document.getElementById("cardForm").reset();
+  document.getElementById("cardId").value = card?.id || "";
+  document.getElementById("cardName").value = card?.name || "";
+  document.getElementById("cardBrand").value = card?.brand || "";
+  document.getElementById("cardLimit").value = card?.limit_amount ?? "";
+  document.getElementById("cardClosingDay").value = card?.closing_day || 25;
+  document.getElementById("cardDueDay").value = card?.due_day || 5;
+  document.getElementById("cardPaymentAccount").value = card?.payment_account_id || "";
+  openModal("cardModalOverlay");
+}
+
+document.getElementById("openCard").addEventListener("click", () => openCardModal(null));
+
+document.getElementById("cardForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("cardId").value;
+  const row = {
+    name: document.getElementById("cardName").value.trim(),
+    brand: document.getElementById("cardBrand").value.trim() || null,
+    limit_amount: document.getElementById("cardLimit").value ? Number(document.getElementById("cardLimit").value) : null,
+    closing_day: Number(document.getElementById("cardClosingDay").value),
+    due_day: Number(document.getElementById("cardDueDay").value),
+    payment_account_id: document.getElementById("cardPaymentAccount").value,
+  };
+  const { error } = id
+    ? await mutate(supabase.from("cards").update(row).eq("id", id))
+    : await mutate(supabase.from("cards").insert({ ...row, user_id: user.id }));
+  if (error) return;
+  closeModal("cardModalOverlay");
+  await loadStaticData();
+  renderCardsGrid();
+  fillSelects();
+});
+
+async function archiveCard(card) {
+  if (!(await confirmDialog(`Arquivar o cartão "${card.name}"? As compras já feitas são mantidas.`, "Arquivar cartão"))) return;
+  const { error } = await mutate(supabase.from("cards").update({ archived: true }).eq("id", card.id));
+  if (error) return;
+  await loadStaticData();
+  renderCardsGrid();
+  fillSelects();
+}
+
+// ciclo de fatura: dado o dia de fechamento, acha o mês/ano da fatura que
+// recebe uma compra feita em `date`
+function invoiceReferenceMonth(date, closingDay) {
+  let year = date.getFullYear();
+  let month0 = date.getMonth();
+  if (date.getDate() > closingDay) {
+    month0 += 1;
+    if (month0 > 11) { month0 = 0; year += 1; }
+  }
+  return { year, month0 };
+}
+
+function invoiceDates(year, month0, closingDay, dueDay) {
+  const closingDate = new Date(year, month0, closingDay);
+  let dueYear = year, dueMonth0 = month0;
+  if (dueDay <= closingDay) {
+    dueMonth0 += 1;
+    if (dueMonth0 > 11) { dueMonth0 = 0; dueYear += 1; }
+  }
+  const dueDate = new Date(dueYear, dueMonth0, dueDay);
+  return { closingDate, dueDate };
+}
+
+function referenceMonthKey(year, month0) {
+  return `${year}-${String(month0 + 1).padStart(2, "0")}`;
+}
+
+async function ensureInvoice(card, year, month0) {
+  const refMonth = referenceMonthKey(year, month0);
+  const existing = invoices.find((i) => i.card_id === card.id && i.reference_month === refMonth);
+  if (existing) return existing;
+  const { closingDate, dueDate } = invoiceDates(year, month0, card.closing_day, card.due_day);
+  const { data, error } = await mutate(
+    supabase
+      .from("invoices")
+      .insert({
+        user_id: user.id,
+        card_id: card.id,
+        reference_month: refMonth,
+        closing_date: toISODate(closingDate),
+        due_date: toISODate(dueDate),
+      })
+      .select()
+      .single()
+  );
+  if (error) return null;
+  invoices.push(data);
+  return data;
+}
+
+async function payInvoice(invoice, card) {
+  const refLabel = monthFmt.format(new Date(invoice.reference_month + "-01T12:00:00")).toUpperCase();
+  const payAcc = accounts.find((a) => a.id === card.payment_account_id);
+  const ok = await confirmDialog(
+    `Marcar a fatura de ${refLabel} do cartão "${card.name}" como paga? O valor sai da conta "${payAcc?.name || "—"}".`,
+    "Pagar fatura"
+  );
+  if (!ok) return;
+  const { error } = await mutate(
+    supabase.from("transactions").update({ paid: true }).eq("invoice_id", invoice.id).eq("paid", false)
+  );
+  if (error) return;
+  await loadStaticData();
+  renderCardsGrid();
+  await refreshMonth();
+}
+
+document.getElementById("openCardPurchase").addEventListener("click", () => {
+  document.getElementById("cardPurchaseForm").reset();
+  document.getElementById("purchaseDate").value = toISODate(new Date());
+  fillCategorySelect("purchaseCategory", "despesa");
+  openModal("cardPurchaseModalOverlay");
+});
+
+document.getElementById("cardPurchaseForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const cardId = document.getElementById("purchaseCard").value;
+  const card = cards.find((c) => c.id === cardId);
+  if (!card) return;
+
+  const desc = document.getElementById("purchaseDesc").value.trim();
+  const total = Number(document.getElementById("purchaseAmount").value);
+  const count = Number(document.getElementById("purchaseCount").value);
+  const firstDate = new Date(document.getElementById("purchaseDate").value + "T12:00:00");
+  const categoryId = document.getElementById("purchaseCategory").value;
+  const groupId = count > 1 ? crypto.randomUUID() : null;
+
+  const base = Math.floor((total / count) * 100) / 100;
+  const remainder = Math.round((total - base * count) * 100) / 100;
+
+  let { year, month0 } = invoiceReferenceMonth(firstDate, card.closing_day);
+  const rows = [];
+  for (let i = 0; i < count; i++) {
+    const inv = await ensureInvoice(card, year, month0);
+    if (!inv) return;
+    const d = addMonthsClamped(firstDate, i);
+    rows.push({
+      description: desc,
+      amount: i === count - 1 ? Math.round((base + remainder) * 100) / 100 : base,
+      kind: "despesa",
+      date: toISODate(d),
+      account_id: card.payment_account_id,
+      category_id: categoryId,
+      installment_number: count > 1 ? i + 1 : null,
+      installment_total: count > 1 ? count : null,
+      installment_group: groupId,
+      card_id: card.id,
+      invoice_id: inv.id,
+      paid: false,
+      created_by: user.id,
+    });
+    month0 += 1;
+    if (month0 > 11) { month0 = 0; year += 1; }
+  }
+
+  const { error } = await mutate(supabase.from("transactions").insert(rows));
+  if (error) return;
+  closeModal("cardPurchaseModalOverlay");
+  await loadStaticData();
+  renderCardsGrid();
+  await refreshMonth();
+});
+
 function fillSelects() {
   const accOpts = accounts.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("");
   document.getElementById("txAccount").innerHTML = accOpts;
   document.getElementById("instAccount").innerHTML = accOpts;
   document.getElementById("recAccount").innerHTML = accOpts;
+  document.getElementById("cardPaymentAccount").innerHTML = accOpts;
+  document.getElementById("purchaseCard").innerHTML = cards
+    .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+    .join("");
   fillCategorySelect("txCategory", document.getElementById("txKind").value);
   fillCategorySelect("instCategory", "despesa");
   fillCategorySelect("recCategory", "despesa");
+  fillCategorySelect("purchaseCategory", "despesa");
 }
 
 function fillCategorySelect(id, kind) {
@@ -445,7 +693,7 @@ document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
-    ["dashboard", "graficos", "contas", "fixas"].forEach((t) => {
+    ["dashboard", "graficos", "contas", "cartoes", "fixas"].forEach((t) => {
       document.getElementById(`tab-${t}`).style.display = t === btn.dataset.tab ? "" : "none";
     });
   });
@@ -719,6 +967,10 @@ async function deleteTransaction(t) {
   if (!t.installment_total && !(await confirmDialog(`Excluir "${t.description}"?`, "Excluir lançamento"))) return;
   const { error } = await mutate(supabase.from("transactions").delete().eq("id", t.id));
   if (error) return;
+  if (t.invoice_id) {
+    cardTransactions = cardTransactions.filter((x) => x.id !== t.id);
+    renderCardsGrid();
+  }
   await refreshMonth();
 }
 
