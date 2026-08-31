@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minhas Finanças — Entrar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="grain"></div>
+
+<div class="auth-wrap">
+  <div class="auth-box">
+    <div class="logo">FINANÇAS<span>.</span></div>
+    <div class="sub mono">CONTROLE FINANCEIRO PESSOAL</div>
+
+    <div id="authMsg" class="auth-msg"></div>
+
+    <form id="authForm">
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input type="password" id="password" required minlength="6" autocomplete="current-password">
+      </div>
+      <button type="submit" id="authSubmit" class="btn btn-primary btn-block">Entrar</button>
+    </form>
+
+    <div class="toggle-row">
+      <span id="authTitle" style="display:none">Entrar</span>
+      <a href="#" id="modeToggle">Criar uma conta</a>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/auth.js"></script>
+</body>
+</html>

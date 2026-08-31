@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minhas Finanças</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="grain"></div>
+
+<div id="loadingVeil" class="loading-veil"><span class="mono">CARREGANDO…</span></div>
+
+<header>
+  <div class="logo">FINANÇAS<span>.</span></div>
+  <nav>
+    <span class="mono" id="userEmail"></span>
+    <button class="btn-ghost" id="logoutBtn">SAIR</button>
+  </nav>
+</header>
+
+<main>
+  <div class="eyebrow mono">PAINEL</div>
+  <h1 class="page-title">Visão geral</h1>
+
+  <div class="summary-grid" id="summaryGrid"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="dashboard">Lançamentos</button>
+    <button class="tab" data-tab="contas">Contas &amp; Cartões</button>
+    <button class="tab" data-tab="fixas">Despesas Fixas</button>
+  </div>
+
+  <!-- ===== TAB: DASHBOARD ===== -->
+  <section id="tab-dashboard">
+    <div class="action-bar">
+      <div class="month-nav">
+        <button id="prevMonth">‹</button>
+        <div class="month-label display" id="monthLabel"></div>
+        <button id="nextMonth">›</button>
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline" id="openTxReceita">+ Receita</button>
+        <button class="btn btn-outline" id="openTxDespesa">+ Despesa</button>
+        <button class="btn btn-primary" id="openInstallment">+ Parcelado</button>
+      </div>
+    </div>
+    <div id="txList"></div>
+  </section>
+
+  <!-- ===== TAB: CONTAS ===== -->
+  <section id="tab-contas" style="display:none">
+    <div class="action-bar">
+      <div></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="openAccount">+ Conta / Cartão</button>
+      </div>
+    </div>
+    <div class="item-grid" id="accountsGrid"></div>
+  </section>
+
+  <!-- ===== TAB: FIXAS ===== -->
+  <section id="tab-fixas" style="display:none">
+    <div class="action-bar">
+      <div></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="openRecurring">+ Despesa Fixa</button>
+      </div>
+    </div>
+    <div class="item-grid" id="recurringGrid"></div>
+  </section>
+</main>
+
+<footer>MINHAS FINANÇAS — DADOS PRIVADOS, SINCRONIZADOS NA NUVEM</footer>
+
+<!-- ===== MODAL: LANÇAMENTO SIMPLES (receita/despesa) ===== -->
+<div class="modal-overlay" id="txModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2 id="txModalTitle">Nova despesa</h2>
+    <form id="txForm">
+      <input type="hidden" id="txId" value="">
+      <input type="hidden" id="txKind" value="despesa">
+      <div class="field">
+        <label>Descrição</label>
+        <input type="text" id="txDesc" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Valor (R$)</label>
+          <input type="number" id="txAmount" step="0.01" min="0.01" required>
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input type="date" id="txDate" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Conta</label>
+          <select id="txAccount" required></select>
+        </div>
+        <div class="field">
+          <label>Categoria</label>
+          <select id="txCategory" required></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary btn-block">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MODAL: PARCELADO ===== -->
+<div class="modal-overlay" id="installmentModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2>Despesa Parcelada</h2>
+    <form id="installmentForm">
+      <div class="field">
+        <label>Descrição</label>
+        <input type="text" id="instDesc" required placeholder="Ex: Notebook">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Valor total (R$)</label>
+          <input type="number" id="instAmount" step="0.01" min="0.01" required>
+        </div>
+        <div class="field">
+          <label>Parcelas</label>
+          <input type="number" id="instCount" min="2" max="60" value="2" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>1ª parcela em</label>
+          <input type="date" id="instDate" required>
+        </div>
+        <div class="field">
+          <label>Conta</label>
+          <select id="instAccount" required></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Categoria</label>
+        <select id="instCategory" required></select>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary btn-block">Criar parcelas</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MODAL: ADICIONAR VALOR A LANÇAMENTO EXISTENTE ===== -->
+<div class="modal-overlay" id="addValueModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2>Adicionar valor</h2>
+    <p class="mono" id="addValueDesc" style="color:var(--bone-dim);font-size:12px;margin-bottom:16px;"></p>
+    <form id="addValueForm">
+      <div class="field">
+        <label>Valor a somar (R$)</label>
+        <input type="number" id="addValueAmount" step="0.01" min="0.01" required autofocus>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary btn-block">Somar ao lançamento</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MODAL: CONTA / CARTÃO ===== -->
+<div class="modal-overlay" id="accountModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2>Conta / Cartão</h2>
+    <form id="accountForm">
+      <input type="hidden" id="accountId">
+      <div class="field">
+        <label>Nome</label>
+        <input type="text" id="accountName" required placeholder="Ex: Nubank, Carteira, Cartão Inter">
+      </div>
+      <div class="field">
+        <label>Tipo</label>
+        <select id="accountType" required>
+          <option value="corrente">Conta corrente</option>
+          <option value="poupanca">Poupança</option>
+          <option value="cartao">Cartão de crédito</option>
+          <option value="dinheiro">Dinheiro</option>
+          <option value="investimento">Investimento</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary btn-block">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MODAL: DESPESA FIXA ===== -->
+<div class="modal-overlay" id="recurringModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2 id="recurringModalTitle">Despesa Fixa Mensal</h2>
+    <form id="recurringForm">
+      <input type="hidden" id="recurringId" value="">
+      <div class="field">
+        <label>Descrição</label>
+        <input type="text" id="recDesc" required placeholder="Ex: Aluguel, Internet">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Valor (R$)</label>
+          <input type="number" id="recAmount" step="0.01" min="0.01" required>
+        </div>
+        <div class="field">
+          <label>Todo dia</label>
+          <input type="number" id="recDay" min="1" max="28" value="5" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Conta</label>
+          <select id="recAccount" required></select>
+        </div>
+        <div class="field">
+          <label>Categoria</label>
+          <select id="recCategory" required></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary btn-block">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
