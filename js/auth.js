@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient.js";
+import { ensureProfile } from "./profile.js";
 
 const form = document.getElementById("authForm");
 const msg = document.getElementById("authMsg");
@@ -116,14 +117,13 @@ async function resolveLoginEmail(identifier) {
   return data?.email || null;
 }
 
-// ---------- GARANTE QUE O PERFIL (username) EXISTE ----------
-async function ensureProfile(user, username) {
-  if (!user) return;
-  const { data: existing } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
-  if (existing) return;
-  const finalUsername = username || user.user_metadata?.username || user.email.split("@")[0];
-  await supabase.from("profiles").insert({ id: user.id, username: finalUsername, email: user.email });
-}
+// ---------- LOGIN COM GOOGLE ----------
+document.getElementById("googleBtn").addEventListener("click", async () => {
+  await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: `${window.location.origin}/app.html` },
+  });
+});
 
 // ---------- SUBMIT ----------
 form.addEventListener("submit", async (e) => {

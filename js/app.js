@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient.js";
+import { ensureProfile } from "./profile.js";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const monthFmt = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
@@ -42,6 +43,7 @@ async function init() {
   if (!session) { window.location.href = "index.html"; return; }
   user = session.user;
   document.getElementById("userEmail").textContent = user.email;
+  await ensureProfile(user);
 
   await loadStaticData();
   await ensureRecurringForVisibleMonth();
