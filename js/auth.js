@@ -87,7 +87,7 @@ function clearMsg() {
 
 // já logado? vai direto pro app
 supabase.auth.getSession().then(({ data }) => {
-  if (data.session) window.location.href = "app.html";
+  if (data.session) window.location.href = "/app";
 });
 
 // ---------- ALTERNAR LOGIN / CRIAR CONTA ----------
@@ -126,7 +126,7 @@ async function resolveLoginEmail(identifier) {
 document.getElementById("googleBtn").addEventListener("click", async () => {
   await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${window.location.origin}/app.html` },
+    options: { redirectTo: `${window.location.origin}/app` },
   });
 });
 
@@ -165,7 +165,7 @@ form.addEventListener("submit", async (e) => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       await ensureProfile(data.user);
-      window.location.href = "app.html";
+      window.location.href = "/app";
     } else {
       const email = identifierInput.value.trim();
       const username = usernameInput.value.trim();
@@ -178,7 +178,7 @@ form.addEventListener("submit", async (e) => {
 
       if (data.session) {
         await ensureProfile(data.user, username);
-        window.location.href = "app.html";
+        window.location.href = "/app";
       } else {
         showMsg("Conta criada! Verifique seu e-mail para confirmar antes de entrar.", "info");
       }

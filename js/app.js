@@ -43,7 +43,7 @@ init();
 
 async function init() {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) { window.location.href = "index.html"; return; }
+  if (!session) { window.location.href = "/"; return; }
   user = session.user;
   await ensureProfile(user);
   const { data: profile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
@@ -59,7 +59,7 @@ async function init() {
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   await supabase.auth.signOut();
-  window.location.href = "index.html";
+  window.location.href = "/";
 });
 
 // ---------- DATA LOADING ----------
