@@ -88,6 +88,26 @@ create policy "auth full access" on transactions
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- Categorias padrão
+-- Perfis (associa um nome de usuário único a cada login, permite
+-- entrar tanto com e-mail quanto com nome de usuário)
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  username text unique not null check (username ~ '^[a-zA-Z0-9_]{3,20}$'),
+  email text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table profiles enable row level security;
+
+create policy "leitura publica para login por usuario" on profiles
+  for select using (true);
+
+create policy "usuario cria proprio perfil" on profiles
+  for insert with check (auth.uid() = id);
+
+create policy "usuario atualiza proprio perfil" on profiles
+  for update using (auth.uid() = id);
+
 insert into categories (name, kind, color) values
   ('Salário', 'receita', '#C99A44'),
   ('Freelance / Extra', 'receita', '#C99A44'),

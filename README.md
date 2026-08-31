@@ -6,7 +6,8 @@ dispositivo em que você fizer login — não dependem do navegador local.
 
 ## O que tem
 
-- Login por e-mail/senha (até você + 1 pessoa)
+- Login por e-mail **ou nome de usuário** + senha (até você + 1 pessoa), com
+  mostrar/ocultar senha, barra de força e confirmação de senha no cadastro
 - Contas e cartões múltiplos, com saldo por conta
 - Lançamento de receitas e despesas
 - Despesas parceladas (ex: "Notebook, 10x") — gera as parcelas automaticamente

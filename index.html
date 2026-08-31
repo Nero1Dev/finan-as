@@ -18,20 +18,43 @@
 
     <div id="authMsg" class="auth-msg"></div>
 
-    <form id="authForm">
-      <div class="field">
-        <label for="email">E-mail</label>
-        <input type="email" id="email" required autocomplete="email">
+    <form id="authForm" novalidate>
+      <div class="field collapsible" id="usernameField">
+        <label for="username">Nome de usuário</label>
+        <input type="text" id="username" autocomplete="username" placeholder="ex: nairon">
       </div>
+
+      <div class="field">
+        <label for="identifier" id="identifierLabel">E-mail ou usuário</label>
+        <input type="text" id="identifier" required autocomplete="username">
+      </div>
+
       <div class="field">
         <label for="password">Senha</label>
-        <input type="password" id="password" required minlength="6" autocomplete="current-password">
+        <div class="password-wrap">
+          <input type="password" id="password" required minlength="6" autocomplete="current-password">
+          <button type="button" id="togglePassword" class="toggle-pw">MOSTRAR</button>
+        </div>
+        <div class="pw-strength collapsible" id="pwStrengthWrap">
+          <div class="pw-strength-bars">
+            <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
+          </div>
+          <div class="pw-strength-label mono" id="pwStrengthLabel"></div>
+        </div>
       </div>
+
+      <div class="field collapsible" id="confirmField">
+        <label for="confirmPassword">Confirmar senha</label>
+        <div class="password-wrap">
+          <input type="password" id="confirmPassword" autocomplete="new-password">
+          <button type="button" id="toggleConfirmPassword" class="toggle-pw">MOSTRAR</button>
+        </div>
+      </div>
+
       <button type="submit" id="authSubmit" class="btn btn-primary btn-block">Entrar</button>
     </form>
 
     <div class="toggle-row">
-      <span id="authTitle" style="display:none">Entrar</span>
       <a href="#" id="modeToggle">Criar uma conta</a>
     </div>
   </div>
