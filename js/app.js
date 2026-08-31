@@ -42,8 +42,9 @@ async function init() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { window.location.href = "index.html"; return; }
   user = session.user;
-  document.getElementById("userEmail").textContent = user.email;
   await ensureProfile(user);
+  const { data: profile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
+  document.getElementById("userLabel").textContent = profile?.username || user.email;
 
   await loadStaticData();
   await ensureRecurringForVisibleMonth();
