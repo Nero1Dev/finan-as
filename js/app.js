@@ -469,6 +469,31 @@ async function changeMonth(delta) {
 // ---------- MODAL HELPERS ----------
 function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+
+// ---------- CONFIRMAÇÃO (substitui window.confirm) ----------
+function confirmDialog(message, title = "Confirmar") {
+  return new Promise((resolve) => {
+    document.getElementById("confirmTitle").textContent = title;
+    document.getElementById("confirmMessage").textContent = message;
+    const yesBtn = document.getElementById("confirmYes");
+    const noBtn = document.getElementById("confirmNo");
+    const overlay = document.getElementById("confirmModalOverlay");
+    function cleanup(result) {
+      overlay.classList.remove("open");
+      yesBtn.removeEventListener("click", onYes);
+      noBtn.removeEventListener("click", onNo);
+      overlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onYes() { cleanup(true); }
+    function onNo() { cleanup(false); }
+    function onOverlay(e) { if (e.target === overlay) cleanup(false); }
+    yesBtn.addEventListener("click", onYes);
+    noBtn.addEventListener("click", onNo);
+    overlay.addEventListener("click", onOverlay);
+    overlay.classList.add("open");
+  });
+}
 document.querySelectorAll("[data-close]").forEach((btn) => {
   btn.addEventListener("click", () => btn.closest(".modal-overlay").classList.remove("open"));
 });
@@ -625,7 +650,7 @@ document.getElementById("accountForm").addEventListener("submit", async (e) => {
 });
 
 async function archiveAccount(a) {
-  if (!confirm(`Arquivar "${a.name}"? Os lançamentos existentes são mantidos.`)) return;
+  if (!(await confirmDialog(`Arquivar "${a.name}"? Os lançamentos existentes são mantidos.`, "Arquivar conta"))) return;
   const { error } = await mutate(supabase.from("accounts").update({ archived: true }).eq("id", a.id));
   if (error) return;
   await loadStaticData();
@@ -680,7 +705,7 @@ async function toggleRecurring(r) {
 }
 
 async function deleteRecurring(r) {
-  if (!confirm(`Excluir a despesa fixa "${r.description}"? Lançamentos já gerados são mantidos.`)) return;
+  if (!(await confirmDialog(`Excluir a despesa fixa "${r.description}"? Lançamentos já gerados são mantidos.`, "Excluir despesa fixa"))) return;
   const { error } = await mutate(supabase.from("recurring_expenses").delete().eq("id", r.id));
   if (error) return;
   await loadStaticData();
@@ -689,8 +714,8 @@ async function deleteRecurring(r) {
 
 // ---------- EXCLUIR LANÇAMENTO ----------
 async function deleteTransaction(t) {
-  if (t.installment_total && !confirm(`Esta é a parcela ${t.installment_number}/${t.installment_total}. Excluir só esta parcela?`)) return;
-  if (!t.installment_total && !confirm(`Excluir "${t.description}"?`)) return;
+  if (t.installment_total && !(await confirmDialog(`Esta é a parcela ${t.installment_number}/${t.installment_total}. Excluir só esta parcela?`, "Excluir parcela"))) return;
+  if (!t.installment_total && !(await confirmDialog(`Excluir "${t.description}"?`, "Excluir lançamento"))) return;
   const { error } = await mutate(supabase.from("transactions").delete().eq("id", t.id));
   if (error) return;
   await refreshMonth();
