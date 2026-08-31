@@ -29,6 +29,7 @@
 
   <div class="tabs">
     <button class="tab active" data-tab="dashboard">Lançamentos</button>
+    <button class="tab" data-tab="graficos">Gráficos</button>
     <button class="tab" data-tab="contas">Contas &amp; Cartões</button>
     <button class="tab" data-tab="fixas">Despesas Fixas</button>
   </div>
@@ -48,6 +49,34 @@
       </div>
     </div>
     <div id="txList"></div>
+  </section>
+
+  <!-- ===== TAB: GRÁFICOS ===== -->
+  <section id="tab-graficos" style="display:none">
+    <div class="action-bar">
+      <div class="month-nav">
+        <button id="prevMonth2">‹</button>
+        <div class="month-label display" id="monthLabel2"></div>
+        <button id="nextMonth2">›</button>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="eyebrow mono" style="margin-top:8px;">DESPESAS POR CATEGORIA</div>
+
+    <div id="donutEmpty" class="empty-state" style="display:none;">Nenhuma despesa neste mês ainda.</div>
+
+    <div class="donut-layout" id="donutLayout">
+      <div class="donut-wrap">
+        <svg id="donutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
+        <div class="donut-center">
+          <div class="donut-center-label mono">TOTAL</div>
+          <div class="donut-center-value" id="donutTotalValue"></div>
+        </div>
+      </div>
+      <div class="donut-legend" id="donutLegend"></div>
+    </div>
+    <div class="donut-tooltip" id="donutTooltip"></div>
   </section>
 
   <!-- ===== TAB: CONTAS ===== -->

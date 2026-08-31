@@ -136,6 +136,7 @@ function renderAll() {
   renderSummary();
   renderMonthLabel();
   renderTxList();
+  renderDonut();
   renderAccountsGrid();
   renderRecurringGrid();
   fillSelects();
@@ -179,8 +180,130 @@ function summaryCard(label, value, isPending = false) {
 }
 
 function renderMonthLabel() {
-  const label = monthFmt.format(viewDate);
-  document.getElementById("monthLabel").textContent = label.toUpperCase();
+  const label = monthFmt.format(viewDate).toUpperCase();
+  document.getElementById("monthLabel").textContent = label;
+  document.getElementById("monthLabel2").textContent = label;
+}
+
+// ---------- GRÁFICOS (despesas por categoria) ----------
+const CATEGORY_PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+const OTHER_COLOR = "#6b6259";
+
+function categoryColorMap() {
+  const despesaCats = categories.filter((c) => c.kind === "despesa");
+  const map = {};
+  despesaCats.forEach((c, i) => { map[c.id] = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]; });
+  return map;
+}
+
+function renderDonut() {
+  const svg = document.getElementById("donutSvg");
+  const legend = document.getElementById("donutLegend");
+  const totalEl = document.getElementById("donutTotalValue");
+  const empty = document.getElementById("donutEmpty");
+  const layout = document.getElementById("donutLayout");
+  if (!svg) return;
+
+  const colorMap = categoryColorMap();
+  const totals = {};
+  for (const t of transactions) {
+    if (t.kind !== "despesa") continue;
+    totals[t.category_id] = (totals[t.category_id] || 0) + Number(t.amount);
+  }
+
+  let entries = Object.entries(totals)
+    .filter(([, amount]) => amount > 0)
+    .map(([catId, amount]) => {
+      const cat = categories.find((c) => c.id === catId);
+      return { name: cat?.name || "Sem categoria", amount, color: colorMap[catId] || OTHER_COLOR };
+    })
+    .sort((a, b) => b.amount - a.amount);
+
+  svg.innerHTML = "";
+  legend.innerHTML = "";
+
+  if (entries.length === 0) {
+    layout.style.display = "none";
+    empty.style.display = "";
+    return;
+  }
+  empty.style.display = "none";
+  layout.style.display = "";
+
+  if (entries.length > 6) {
+    const head = entries.slice(0, 5);
+    const tailSum = entries.slice(5).reduce((s, e) => s + e.amount, 0);
+    entries = [...head, { name: "Outras", amount: tailSum, color: OTHER_COLOR }];
+  }
+
+  const total = entries.reduce((s, e) => s + e.amount, 0);
+  totalEl.textContent = currency.format(total);
+
+  const R = 70, CX = 90, CY = 90, C = 2 * Math.PI * R, GAP = 3, SW = 22;
+  const ns = "http://www.w3.org/2000/svg";
+  let offset = 0;
+  let cumFrac = 0;
+  for (const e of entries) {
+    const frac = e.amount / total;
+    const len = frac * C;
+    const dash = Math.max(len - GAP, 0.001);
+    const circle = document.createElementNS(ns, "circle");
+    circle.setAttribute("cx", CX);
+    circle.setAttribute("cy", CY);
+    circle.setAttribute("r", R);
+    circle.setAttribute("fill", "none");
+    circle.setAttribute("stroke", e.color);
+    circle.setAttribute("stroke-width", SW);
+    circle.setAttribute("stroke-dasharray", `${dash} ${C - dash}`);
+    circle.setAttribute("stroke-dashoffset", `${-offset}`);
+    circle.setAttribute("transform", `rotate(-90 ${CX} ${CY})`);
+    circle.setAttribute("class", "donut-seg");
+    circle.setAttribute("pointer-events", "none");
+    svg.appendChild(circle);
+    offset += len;
+    e.startAngle = cumFrac * 360;
+    cumFrac += frac;
+    e.endAngle = cumFrac * 360;
+    e.pct = (frac * 100).toFixed(1);
+  }
+
+  svg.onmousemove = (ev) => {
+    const rect = svg.getBoundingClientRect();
+    const dx = ev.clientX - (rect.left + rect.width / 2);
+    const dy = ev.clientY - (rect.top + rect.height / 2);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const scale = rect.width / 180;
+    const inner = (R - SW / 2) * scale, outer = (R + SW / 2) * scale;
+    if (dist < inner || dist > outer) { hideDonutTooltip(); return; }
+    const angle = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+    const hit = entries.find((e) => angle >= e.startAngle && angle < e.endAngle);
+    if (!hit) { hideDonutTooltip(); return; }
+    showDonutTooltip(ev, hit.name, hit.amount, hit.pct);
+  };
+  svg.onmouseleave = hideDonutTooltip;
+
+  for (const e of entries) {
+    const pct = ((e.amount / total) * 100).toFixed(1);
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    row.innerHTML = `
+      <span class="swatch" style="background:${e.color}"></span>
+      <span class="legend-name">${escapeHtml(e.name)}</span>
+      <span class="legend-pct mono">${pct}%</span>
+      <span class="legend-amount mono">${currency.format(e.amount)}</span>`;
+    legend.appendChild(row);
+  }
+}
+
+function showDonutTooltip(ev, name, amount, pct) {
+  const tip = document.getElementById("donutTooltip");
+  tip.innerHTML = `<div class="tt-name">${escapeHtml(name)}</div>${pct}% · ${currency.format(amount)}`;
+  tip.style.left = ev.clientX + 14 + "px";
+  tip.style.top = ev.clientY + 14 + "px";
+  tip.classList.add("show");
+}
+function hideDonutTooltip() {
+  document.getElementById("donutTooltip").classList.remove("show");
 }
 
 function renderTxList() {
@@ -322,7 +445,7 @@ document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
-    ["dashboard", "contas", "fixas"].forEach((t) => {
+    ["dashboard", "graficos", "contas", "fixas"].forEach((t) => {
       document.getElementById(`tab-${t}`).style.display = t === btn.dataset.tab ? "" : "none";
     });
   });
@@ -331,6 +454,8 @@ document.querySelectorAll(".tab").forEach((btn) => {
 // ---------- MONTH NAV ----------
 document.getElementById("prevMonth").addEventListener("click", () => changeMonth(-1));
 document.getElementById("nextMonth").addEventListener("click", () => changeMonth(1));
+document.getElementById("prevMonth2").addEventListener("click", () => changeMonth(-1));
+document.getElementById("nextMonth2").addEventListener("click", () => changeMonth(1));
 
 async function changeMonth(delta) {
   viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
@@ -338,6 +463,7 @@ async function changeMonth(delta) {
   await loadMonthTransactions();
   renderMonthLabel();
   renderTxList();
+  renderDonut();
 }
 
 // ---------- MODAL HELPERS ----------
@@ -574,6 +700,7 @@ async function refreshMonth() {
   await loadMonthTransactions();
   renderTxList();
   renderSummary();
+  renderDonut();
 }
 
 // ---------- UTIL ----------
