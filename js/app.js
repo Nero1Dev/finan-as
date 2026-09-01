@@ -512,8 +512,7 @@ function openCardModal(card) {
 
 document.getElementById("openCard").addEventListener("click", () => openCardModal(null));
 
-document.getElementById("cardForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+guardedSubmit("cardForm", async () => {
   const id = document.getElementById("cardId").value;
   const row = {
     name: document.getElementById("cardName").value.trim(),
@@ -621,8 +620,7 @@ document.getElementById("purchaseIsTotal").addEventListener("change", (e) => {
   document.getElementById("purchaseAmountLabel").textContent = e.target.checked ? "Valor total (R$)" : "Valor da parcela (R$)";
 });
 
-document.getElementById("cardPurchaseForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+guardedSubmit("cardPurchaseForm", async () => {
   const cardId = document.getElementById("purchaseCard").value;
   const card = cards.find((c) => c.id === cardId);
   if (!card) return;
@@ -722,6 +720,24 @@ async function changeMonth(delta) {
 function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
 
+// evita duplo envio: desabilita o botão de salvar enquanto o handler roda
+function guardedSubmit(formId, handler) {
+  const form = document.getElementById(formId);
+  const submitBtn = form.querySelector('[type="submit"]');
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (submitBtn.disabled) return;
+    submitBtn.disabled = true;
+    submitBtn.classList.add("loading");
+    try {
+      await handler(e);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove("loading");
+    }
+  });
+}
+
 // ---------- CONFIRMAÇÃO (substitui window.confirm) ----------
 // Retorna true (confirmou), false (cancelou) ou "extra" (clicou no botão extra).
 function confirmDialog(message, title = "Confirmar", { yesLabel = "Confirmar", extraLabel = null } = {}) {
@@ -792,8 +808,7 @@ function editTxModal(t) {
   openModal("txModalOverlay");
 }
 
-document.getElementById("txForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+guardedSubmit("txForm", async () => {
   const id = document.getElementById("txId").value;
   const kind = document.getElementById("txKind").value;
   const row = {
@@ -822,8 +837,7 @@ function openAddValueModal(t) {
   openModal("addValueModalOverlay");
 }
 
-document.getElementById("addValueForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+guardedSubmit("addValueForm", async () => {
   if (!addValueTarget) return;
   const extra = Number(document.getElementById("addValueAmount").value);
   const newAmount = Number(addValueTarget.amount) + extra;
@@ -857,8 +871,7 @@ document.getElementById("instIsTotal").addEventListener("change", (e) => {
   document.getElementById("instAmountLabel").textContent = e.target.checked ? "Valor total (R$)" : "Valor da parcela (R$)";
 });
 
-document.getElementById("installmentForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+guardedSubmit("installmentForm", async () => {
   const desc = document.getElementById("instDesc").value.trim();
   const amountInput = Number(document.getElementById("instAmount").value);
   const count = Number(document.getElementById("instCount").value);
@@ -912,8 +925,7 @@ function openAccountModal(account) {
   openModal("accountModalOverlay");
 }
 
-document.getElementById("accountForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+guardedSubmit("accountForm", async () => {
   const id = document.getElementById("accountId").value;
   const row = {
     name: document.getElementById("accountName").value.trim(),
@@ -956,8 +968,7 @@ function editRecurringModal(r) {
   openModal("recurringModalOverlay");
 }
 
-document.getElementById("recurringForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+guardedSubmit("recurringForm", async () => {
   const id = document.getElementById("recurringId").value;
   const row = {
     description: document.getElementById("recDesc").value.trim(),
