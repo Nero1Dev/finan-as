@@ -102,7 +102,7 @@ async function loadMonthTransactions() {
 }
 
 async function loadAllTransactionsForBalance() {
-  const { data } = await supabase.from("transactions").select("account_id,kind,amount,paid");
+  const { data } = await supabase.from("transactions").select("account_id,kind,amount,paid,date");
   return data || [];
 }
 
@@ -154,11 +154,13 @@ function renderAll() {
 
 async function renderSummary() {
   const all = await loadAllTransactionsForBalance();
+  const todayISO = toISODate(new Date());
   const balanceByAccount = {};
   let total = 0;
   for (const a of accounts) balanceByAccount[a.id] = 0;
   for (const t of all) {
-    if (!t.paid) continue; // pendente ainda não sai da conta
+    if (t.kind === "despesa" && !t.paid) continue; // pendente ainda não saiu da conta
+    if (t.kind === "receita" && t.date > todayISO) continue; // ainda não caiu na conta
     const v = Number(t.amount) * (t.kind === "receita" ? 1 : -1);
     if (t.account_id in balanceByAccount) balanceByAccount[t.account_id] += v;
     total += v;
@@ -166,12 +168,18 @@ async function renderSummary() {
   const pendingThisMonth = transactions
     .filter((t) => t.kind === "despesa" && !t.paid)
     .reduce((sum, t) => sum + Number(t.amount), 0);
+  const receivableThisMonth = transactions
+    .filter((t) => t.kind === "receita" && t.date > todayISO)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const grid = document.getElementById("summaryGrid");
   grid.innerHTML = "";
   grid.appendChild(summaryCard("Saldo total", total));
   if (pendingThisMonth > 0) {
     grid.appendChild(summaryCard("A pagar este mês", -pendingThisMonth, true));
+  }
+  if (receivableThisMonth > 0) {
+    grid.appendChild(summaryCard("A receber este mês", receivableThisMonth));
   }
   for (const a of accounts) {
     grid.appendChild(summaryCard(a.name, balanceByAccount[a.id] || 0));
@@ -346,8 +354,9 @@ function txRow(t) {
   const acc = accounts.find((a) => a.id === t.account_id);
   const card = t.card_id ? cards.find((c) => c.id === t.card_id) : null;
   const cat = categories.find((c) => c.id === t.category_id);
+  const isFutureReceita = t.kind === "receita" && t.date > toISODate(new Date());
   const row = document.createElement("div");
-  row.className = "tx-row" + (t.paid === false ? " pending" : "");
+  row.className = "tx-row" + (t.paid === false || isFutureReceita ? " pending" : "");
   const badge = t.installment_total
     ? `<span class="badge">${t.installment_number}/${t.installment_total}</span>`
     : t.recurring_id
@@ -360,7 +369,9 @@ function txRow(t) {
 
   const paidPill = canTogglePaid
     ? `<button class="paid-pill ${t.paid ? "paid" : "pending"}" data-toggle-paid>${t.paid ? "PAGO" : "PENDENTE"}</button>`
-    : "";
+    : t.kind === "receita"
+      ? `<span class="paid-pill ${isFutureReceita ? "pending" : "paid"}">${isFutureReceita ? "A RECEBER" : "RECEBIDO"}</span>`
+      : "";
   const addBtn = canAddValue ? `<button title="Adicionar valor" data-add>+</button>` : "";
   const originLabel = card ? `${card.name} (cartão)` : (acc?.name || "—");
 
