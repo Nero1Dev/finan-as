@@ -370,7 +370,9 @@ function txRow(t) {
   const paidPill = canTogglePaid
     ? `<button class="paid-pill ${t.paid ? "paid" : "pending"}" data-toggle-paid>${t.paid ? "PAGO" : "PENDENTE"}</button>`
     : t.kind === "receita"
-      ? `<span class="paid-pill ${isFutureReceita ? "pending" : "paid"}">${isFutureReceita ? "A RECEBER" : "RECEBIDO"}</span>`
+      ? (isFutureReceita
+        ? `<button class="paid-pill pending" data-mark-received>A RECEBER</button>`
+        : `<span class="paid-pill paid">RECEBIDO</span>`)
       : "";
   const addBtn = canAddValue ? `<button title="Adicionar valor" data-add>+</button>` : "";
   const originLabel = card ? `${card.name} (cartão)` : (acc?.name || "—");
@@ -383,8 +385,16 @@ function txRow(t) {
   row.querySelector("[data-del]").addEventListener("click", () => deleteTransaction(t));
   row.querySelector("[data-edit]").addEventListener("click", () => editTxModal(t));
   if (canTogglePaid) row.querySelector("[data-toggle-paid]").addEventListener("click", () => togglePaid(t));
+  const markReceivedBtn = row.querySelector("[data-mark-received]");
+  if (markReceivedBtn) markReceivedBtn.addEventListener("click", () => markReceived(t));
   if (canAddValue) row.querySelector("[data-add]").addEventListener("click", () => openAddValueModal(t));
   return row;
+}
+
+async function markReceived(t) {
+  const { error } = await mutate(supabase.from("transactions").update({ date: toISODate(new Date()) }).eq("id", t.id));
+  if (error) return;
+  await refreshMonth();
 }
 
 async function togglePaid(t) {
