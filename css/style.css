@@ -421,6 +421,6 @@ footer{
   .tx-row .amount{grid-area:amount;justify-self:end;}
   .tx-row .status{grid-area:status;justify-self:end;}
   .tx-row .row-actions{grid-area:actions;justify-self:end;}
-  .paid-pill{font-size:25px;letter-spacing:0.5px;padding:7px 15px;border-radius:5px;}
+  .paid-pill{font-size:20px;letter-spacing:0.5px;padding:6px 14px;border-radius:5px;}
   .field-row{grid-template-columns:1fr;}
 }
