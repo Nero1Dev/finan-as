@@ -778,6 +778,19 @@ async function changeMonth(delta) {
 function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
 
+// trava o scroll do fundo enquanto qualquer modal-overlay estiver aberto,
+// não importa por qual caminho foi aberto/fechado (openModal, confirmDialog,
+// clique fora, botão de fechar)
+function updateBodyScrollLock() {
+  const anyOpen = document.querySelector(".modal-overlay.open") !== null;
+  document.body.classList.toggle("modal-open", anyOpen);
+}
+new MutationObserver(updateBodyScrollLock).observe(document.body, {
+  attributes: true,
+  attributeFilter: ["class"],
+  subtree: true,
+});
+
 // evita duplo envio: desabilita o botão de salvar enquanto o handler roda
 function guardedSubmit(formId, handler) {
   const form = document.getElementById(formId);
