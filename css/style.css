@@ -137,7 +137,7 @@ h1.page-title{
 .tx-day-group{margin-bottom:18px;}
 .tx-day-label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1.5px;color:var(--bone-dim);margin-bottom:8px;text-transform:uppercase;}
 .tx-row{
-  display:grid;grid-template-columns:1fr auto auto auto;gap:16px;align-items:center;
+  display:grid;grid-template-columns:1fr auto auto auto auto;gap:16px;align-items:center;
   padding:14px 16px;background:var(--night2);border:1px solid var(--line);border-radius:3px;margin-bottom:6px;
 }
 .tx-row .desc{font-weight:500;}
@@ -146,6 +146,7 @@ h1.page-title{
   padding:2px 6px;border-radius:2px;margin-left:8px;letter-spacing:0.5px;
 }
 .tx-row .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--bone-dim);}
+.tx-row .status{display:flex;}
 .tx-row .amount{font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:17px;white-space:nowrap;}
 .tx-row .amount.receita{color:var(--gold);}
 .tx-row .amount.despesa{color:var(--earth-bright);}
@@ -158,7 +159,7 @@ h1.page-title{
 
 .paid-pill{
   font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;
-  border:1px solid var(--line);border-radius:2px;padding:2px 6px;margin-left:6px;
+  border:1px solid var(--line);border-radius:2px;padding:2px 6px;
   background:transparent;
 }
 .paid-pill.pending{color:var(--gold);border-color:var(--gold);}
@@ -400,8 +401,19 @@ footer{
 }
 
 @media (max-width:640px){
-  .tx-row{grid-template-columns:1fr auto;grid-template-rows:auto auto;}
-  .tx-row .meta{grid-column:1/2;}
-  .tx-row .row-actions{grid-column:2/3;grid-row:1/3;}
+  .tx-row{
+    grid-template-columns:1fr auto;
+    grid-template-rows:auto auto auto;
+    grid-template-areas:
+      "desc   actions"
+      "meta   amount"
+      "meta   status";
+    row-gap:6px;
+  }
+  .tx-row .desc{grid-area:desc;}
+  .tx-row .meta{grid-area:meta;}
+  .tx-row .amount{grid-area:amount;justify-self:end;}
+  .tx-row .status{grid-area:status;justify-self:end;}
+  .tx-row .row-actions{grid-area:actions;justify-self:end;}
   .field-row{grid-template-columns:1fr;}
 }

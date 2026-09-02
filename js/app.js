@@ -404,7 +404,8 @@ function txRow(t) {
 
   row.innerHTML = `
     <div class="desc">${escapeHtml(t.description)}${badge}</div>
-    <div class="meta">${escapeHtml(originLabel)} · ${escapeHtml(cat?.name || "—")} ${paidPill}</div>
+    <div class="meta">${escapeHtml(originLabel)} · ${escapeHtml(cat?.name || "—")}</div>
+    <div class="status">${paidPill}</div>
     <div class="amount ${t.kind}">${t.kind === "despesa" ? "-" : "+"}${currency.format(t.amount)}</div>
     <div class="row-actions">${addBtn}<button title="Editar" data-edit>✎</button><button title="Excluir" data-del>✕</button></div>`;
   row.querySelector("[data-del]").addEventListener("click", () => deleteTransaction(t));
