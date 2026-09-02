@@ -163,6 +163,14 @@ h1.page-title{
 }
 .paid-pill.pending{color:var(--gold);border-color:var(--gold);}
 .paid-pill.paid{color:var(--bone-dim);}
+/* pills que são <button> (clicáveis) ganham preenchimento e hover pra
+   parecer botão de verdade; os <span> (status sem ação) ficam como antes */
+button.paid-pill{cursor:pointer;transition:background .15s ease,border-color .15s ease,transform .1s ease;}
+button.paid-pill.pending{background:rgba(201,154,68,0.16);}
+button.paid-pill.pending:hover{background:rgba(201,154,68,0.32);border-color:var(--gold);}
+button.paid-pill.paid{background:rgba(184,175,156,0.12);}
+button.paid-pill.paid:hover{background:rgba(184,175,156,0.24);color:var(--bone);border-color:var(--bone-dim);}
+button.paid-pill:active{transform:scale(0.93);}
 
 .empty-state{
   padding:50px 20px;text-align:center;color:var(--bone-dim);
