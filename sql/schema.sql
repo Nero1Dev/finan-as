@@ -86,6 +86,7 @@ create table if not exists transactions (
   card_id uuid references cards(id) on delete set null,
   invoice_id uuid references invoices(id) on delete set null,
   paid boolean not null default true,
+  original_date date,
   created_by uuid not null default auth.uid() references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
   unique (recurring_id, recurring_month)

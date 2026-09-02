@@ -372,7 +372,9 @@ function txRow(t) {
     : t.kind === "receita"
       ? (isFutureReceita
         ? `<button class="paid-pill pending" data-mark-received>A RECEBER</button>`
-        : `<span class="paid-pill paid">RECEBIDO</span>`)
+        : t.original_date
+          ? `<button class="paid-pill paid" data-unmark-received>RECEBIDO</button>`
+          : `<span class="paid-pill paid">RECEBIDO</span>`)
       : "";
   const addBtn = canAddValue ? `<button title="Adicionar valor" data-add>+</button>` : "";
   const originLabel = card ? `${card.name} (cartão)` : (acc?.name || "—");
@@ -387,12 +389,24 @@ function txRow(t) {
   if (canTogglePaid) row.querySelector("[data-toggle-paid]").addEventListener("click", () => togglePaid(t));
   const markReceivedBtn = row.querySelector("[data-mark-received]");
   if (markReceivedBtn) markReceivedBtn.addEventListener("click", () => markReceived(t));
+  const unmarkReceivedBtn = row.querySelector("[data-unmark-received]");
+  if (unmarkReceivedBtn) unmarkReceivedBtn.addEventListener("click", () => unmarkReceived(t));
   if (canAddValue) row.querySelector("[data-add]").addEventListener("click", () => openAddValueModal(t));
   return row;
 }
 
 async function markReceived(t) {
-  const { error } = await mutate(supabase.from("transactions").update({ date: toISODate(new Date()) }).eq("id", t.id));
+  const { error } = await mutate(
+    supabase.from("transactions").update({ date: toISODate(new Date()), original_date: t.date }).eq("id", t.id)
+  );
+  if (error) return;
+  await refreshMonth();
+}
+
+async function unmarkReceived(t) {
+  const { error } = await mutate(
+    supabase.from("transactions").update({ date: t.original_date, original_date: null }).eq("id", t.id)
+  );
   if (error) return;
   await refreshMonth();
 }
