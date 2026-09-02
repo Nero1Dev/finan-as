@@ -780,10 +780,22 @@ function closeModal(id) { document.getElementById(id).classList.remove("open"); 
 
 // trava o scroll do fundo enquanto qualquer modal-overlay estiver aberto,
 // não importa por qual caminho foi aberto/fechado (openModal, confirmDialog,
-// clique fora, botão de fechar)
+// clique fora, botão de fechar). overflow:hidden sozinho não é confiável
+// (o scroll já em andamento consegue continuar), então fixa o body na
+// posição atual, tipo trava física, e restaura a posição ao fechar.
+let lockedScrollY = 0;
 function updateBodyScrollLock() {
   const anyOpen = document.querySelector(".modal-overlay.open") !== null;
-  document.body.classList.toggle("modal-open", anyOpen);
+  const isLocked = document.body.classList.contains("modal-open");
+  if (anyOpen && !isLocked) {
+    lockedScrollY = window.scrollY;
+    document.body.style.top = `-${lockedScrollY}px`;
+    document.body.classList.add("modal-open");
+  } else if (!anyOpen && isLocked) {
+    document.body.classList.remove("modal-open");
+    document.body.style.top = "";
+    window.scrollTo({ top: lockedScrollY, left: 0, behavior: "instant" });
+  }
 }
 new MutationObserver(updateBodyScrollLock).observe(document.body, {
   attributes: true,
