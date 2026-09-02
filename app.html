@@ -136,7 +136,7 @@
       <div class="field-row">
         <div class="field">
           <label>Valor (R$)</label>
-          <input type="number" id="txAmount" step="0.01" min="0.01" required>
+          <input type="text" inputmode="decimal" class="money-input" id="txAmount" placeholder="0,00" required>
         </div>
         <div class="field">
           <label>Data</label>
@@ -173,7 +173,7 @@
       <div class="field-row">
         <div class="field">
           <label id="instAmountLabel">Valor da parcela (R$)</label>
-          <input type="number" id="instAmount" step="0.01" min="0.01" required>
+          <input type="text" inputmode="decimal" class="money-input" id="instAmount" placeholder="0,00" required>
         </div>
         <div class="field">
           <label>Parcelas</label>
@@ -216,7 +216,7 @@
     <form id="addValueForm">
       <div class="field">
         <label>Valor a somar (R$)</label>
-        <input type="number" id="addValueAmount" step="0.01" min="0.01" required autofocus>
+        <input type="text" inputmode="decimal" class="money-input" id="addValueAmount" placeholder="0,00" required autofocus>
       </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary btn-block">Somar ao lançamento</button>
@@ -279,7 +279,7 @@
       <div class="field-row">
         <div class="field">
           <label>Valor (R$)</label>
-          <input type="number" id="recAmount" step="0.01" min="0.01" required>
+          <input type="text" inputmode="decimal" class="money-input" id="recAmount" placeholder="0,00" required>
         </div>
         <div class="field">
           <label>Todo dia</label>
@@ -321,7 +321,7 @@
         </div>
         <div class="field">
           <label>Limite (R$)</label>
-          <input type="number" id="cardLimit" step="0.01" min="0" placeholder="opcional">
+          <input type="text" inputmode="decimal" class="money-input" id="cardLimit" placeholder="opcional">
         </div>
       </div>
       <div class="field-row">
@@ -362,7 +362,7 @@
       <div class="field-row">
         <div class="field">
           <label id="purchaseAmountLabel">Valor da parcela (R$)</label>
-          <input type="number" id="purchaseAmount" step="0.01" min="0.01" required>
+          <input type="text" inputmode="decimal" class="money-input" id="purchaseAmount" placeholder="0,00" required>
         </div>
         <div class="field">
           <label>Parcelas</label>

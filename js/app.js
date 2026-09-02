@@ -27,6 +27,29 @@ function showToast(message) {
   }, 4500);
 }
 
+// ---------- MÁSCARA DE VALOR (R$) ----------
+// formata como o usuário digita: dígitos são lidos da direita pra esquerda
+// (últimos 2 = centavos), com "." de milhar e "," decimal, tipo maquininha
+function formatMoney(cents) {
+  return (cents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function moneyInputToNumber(input) {
+  const digits = input.value.replace(/\D/g, "");
+  return digits ? Number(digits) / 100 : 0;
+}
+
+function setMoneyInput(input, amount) {
+  input.value = amount === null || amount === undefined || amount === "" ? "" : formatMoney(Math.round(Number(amount) * 100));
+}
+
+document.querySelectorAll(".money-input").forEach((input) => {
+  input.addEventListener("input", () => {
+    const digits = input.value.replace(/\D/g, "");
+    input.value = digits ? formatMoney(Number(digits)) : "";
+  });
+});
+
 let user = null;
 let accounts = [];
 let categories = [];
@@ -538,7 +561,7 @@ function openCardModal(card) {
   document.getElementById("cardId").value = card?.id || "";
   document.getElementById("cardName").value = card?.name || "";
   document.getElementById("cardBrand").value = card?.brand || "";
-  document.getElementById("cardLimit").value = card?.limit_amount ?? "";
+  setMoneyInput(document.getElementById("cardLimit"), card?.limit_amount ?? "");
   document.getElementById("cardClosingDay").value = card?.closing_day || 25;
   document.getElementById("cardDueDay").value = card?.due_day || 5;
   document.getElementById("cardPaymentAccount").value = card?.payment_account_id || "";
@@ -552,7 +575,7 @@ guardedSubmit("cardForm", async () => {
   const row = {
     name: document.getElementById("cardName").value.trim(),
     brand: document.getElementById("cardBrand").value.trim() || null,
-    limit_amount: document.getElementById("cardLimit").value ? Number(document.getElementById("cardLimit").value) : null,
+    limit_amount: document.getElementById("cardLimit").value.trim() ? moneyInputToNumber(document.getElementById("cardLimit")) : null,
     closing_day: Number(document.getElementById("cardClosingDay").value),
     due_day: Number(document.getElementById("cardDueDay").value),
     payment_account_id: document.getElementById("cardPaymentAccount").value,
@@ -661,7 +684,7 @@ guardedSubmit("cardPurchaseForm", async () => {
   if (!card) return;
 
   const desc = document.getElementById("purchaseDesc").value.trim();
-  const amountInput = Number(document.getElementById("purchaseAmount").value);
+  const amountInput = moneyInputToNumber(document.getElementById("purchaseAmount"));
   const count = Number(document.getElementById("purchaseCount").value);
   const isTotal = document.getElementById("purchaseIsTotal").checked;
   const firstDate = new Date(document.getElementById("purchaseDate").value + "T12:00:00");
@@ -836,7 +859,7 @@ function editTxModal(t) {
   document.getElementById("txModalTitle").textContent = t.kind === "receita" ? "Editar receita" : "Editar despesa";
   fillCategorySelect("txCategory", t.kind);
   document.getElementById("txDesc").value = t.description;
-  document.getElementById("txAmount").value = t.amount;
+  setMoneyInput(document.getElementById("txAmount"), t.amount);
   document.getElementById("txDate").value = t.date;
   document.getElementById("txAccount").value = t.account_id || "";
   document.getElementById("txCategory").value = t.category_id || "";
@@ -848,7 +871,7 @@ guardedSubmit("txForm", async () => {
   const kind = document.getElementById("txKind").value;
   const row = {
     description: document.getElementById("txDesc").value.trim(),
-    amount: Number(document.getElementById("txAmount").value),
+    amount: moneyInputToNumber(document.getElementById("txAmount")),
     kind,
     date: document.getElementById("txDate").value,
     account_id: document.getElementById("txAccount").value,
@@ -874,7 +897,7 @@ function openAddValueModal(t) {
 
 guardedSubmit("addValueForm", async () => {
   if (!addValueTarget) return;
-  const extra = Number(document.getElementById("addValueAmount").value);
+  const extra = moneyInputToNumber(document.getElementById("addValueAmount"));
   const newAmount = Number(addValueTarget.amount) + extra;
   const { error } = await mutate(supabase.from("transactions").update({ amount: newAmount }).eq("id", addValueTarget.id));
   if (error) return;
@@ -908,7 +931,7 @@ document.getElementById("instIsTotal").addEventListener("change", (e) => {
 
 guardedSubmit("installmentForm", async () => {
   const desc = document.getElementById("instDesc").value.trim();
-  const amountInput = Number(document.getElementById("instAmount").value);
+  const amountInput = moneyInputToNumber(document.getElementById("instAmount"));
   const count = Number(document.getElementById("instCount").value);
   const isTotal = document.getElementById("instIsTotal").checked;
   const firstDate = new Date(document.getElementById("instDate").value + "T12:00:00");
@@ -996,7 +1019,7 @@ function editRecurringModal(r) {
   document.getElementById("recurringId").value = r.id;
   document.getElementById("recurringModalTitle").textContent = "Editar Despesa Fixa";
   document.getElementById("recDesc").value = r.description;
-  document.getElementById("recAmount").value = r.amount;
+  setMoneyInput(document.getElementById("recAmount"), r.amount);
   document.getElementById("recDay").value = r.day_of_month;
   document.getElementById("recAccount").value = r.account_id || "";
   document.getElementById("recCategory").value = r.category_id || "";
@@ -1007,7 +1030,7 @@ guardedSubmit("recurringForm", async () => {
   const id = document.getElementById("recurringId").value;
   const row = {
     description: document.getElementById("recDesc").value.trim(),
-    amount: Number(document.getElementById("recAmount").value),
+    amount: moneyInputToNumber(document.getElementById("recAmount")),
     day_of_month: Number(document.getElementById("recDay").value),
     account_id: document.getElementById("recAccount").value,
     category_id: document.getElementById("recCategory").value,
