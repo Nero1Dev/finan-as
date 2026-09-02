@@ -21,6 +21,7 @@ body{
   min-height:100vh;
   overflow-x:hidden;
 }
+body.modal-open{position:fixed;left:0;right:0;overflow:hidden;}
 a{color:inherit;text-decoration:none;}
 button{font-family:inherit;cursor:pointer;}
 input,select{font-family:inherit;}
@@ -136,7 +137,7 @@ h1.page-title{
 .tx-day-group{margin-bottom:18px;}
 .tx-day-label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1.5px;color:var(--bone-dim);margin-bottom:8px;text-transform:uppercase;}
 .tx-row{
-  display:grid;grid-template-columns:1fr auto auto auto;gap:16px;align-items:center;
+  display:grid;grid-template-columns:1fr auto auto auto auto;gap:16px;align-items:center;
   padding:14px 16px;background:var(--night2);border:1px solid var(--line);border-radius:3px;margin-bottom:6px;
 }
 .tx-row .desc{font-weight:500;}
@@ -145,6 +146,7 @@ h1.page-title{
   padding:2px 6px;border-radius:2px;margin-left:8px;letter-spacing:0.5px;
 }
 .tx-row .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--bone-dim);}
+.tx-row .status{display:flex;}
 .tx-row .amount{font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:17px;white-space:nowrap;}
 .tx-row .amount.receita{color:var(--gold);}
 .tx-row .amount.despesa{color:var(--earth-bright);}
@@ -157,11 +159,23 @@ h1.page-title{
 
 .paid-pill{
   font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;
-  border:1px solid var(--line);border-radius:2px;padding:2px 6px;margin-left:6px;
+  border:1px solid var(--line);border-radius:2px;padding:2px 6px;
   background:transparent;
 }
 .paid-pill.pending{color:var(--gold);border-color:var(--gold);}
 .paid-pill.paid{color:var(--bone-dim);}
+/* pills que são <button> (clicáveis) ganham preenchimento e hover pra
+   parecer botão de verdade; os <span> (status sem ação) ficam como antes */
+button.paid-pill{
+  cursor:pointer;font-weight:600;border-width:1.5px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
+  transition:background .15s ease,border-color .15s ease,transform .1s ease,box-shadow .15s ease;
+}
+button.paid-pill.pending{background:rgba(201,154,68,0.32);border-color:var(--gold);}
+button.paid-pill.pending:hover{background:rgba(201,154,68,0.46);}
+button.paid-pill.paid{background:rgba(184,175,156,0.24);border-color:var(--bone-dim);}
+button.paid-pill.paid:hover{background:rgba(184,175,156,0.36);color:var(--bone);}
+button.paid-pill:active{transform:scale(0.93);box-shadow:0 0 0 rgba(0,0,0,0);}
 
 .empty-state{
   padding:50px 20px;text-align:center;color:var(--bone-dim);
@@ -394,8 +408,26 @@ footer{
 .foot-credit-fixed{position:fixed;bottom:18px;left:0;right:0;margin-top:0;z-index:2;}
 
 @media (max-width:640px){
-  .tx-row{grid-template-columns:1fr auto;grid-template-rows:auto auto;}
-  .tx-row .meta{grid-column:1/2;}
-  .tx-row .row-actions{grid-column:2/3;grid-row:1/3;}
+  main{padding-left:16px;padding-right:16px;}
+  .summary-grid{grid-template-columns:1fr 1fr;gap:10px;}
+  .summary-grid .card:last-child:nth-child(odd){grid-column:1/-1;}
+  .card{padding:clamp(10px,3vw,16px);}
+  .card .label{font-size:clamp(8px,2.2vw,11px);letter-spacing:0.5px;margin-bottom:6px;}
+  .card .value{font-size:clamp(16px,5.2vw,24px);white-space:nowrap;}
+  .tx-row{
+    grid-template-columns:1fr auto;
+    grid-template-rows:auto auto auto;
+    grid-template-areas:
+      "desc   actions"
+      "meta   amount"
+      "meta   status";
+    row-gap:6px;
+  }
+  .tx-row .desc{grid-area:desc;}
+  .tx-row .meta{grid-area:meta;}
+  .tx-row .amount{grid-area:amount;justify-self:end;font-size:22px;}
+  .tx-row .status{grid-area:status;justify-self:end;}
+  .tx-row .row-actions{grid-area:actions;justify-self:end;}
+  .paid-pill{font-size:20px;letter-spacing:0.5px;padding:6px 14px;border-radius:5px;}
   .field-row{grid-template-columns:1fr;}
 }

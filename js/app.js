@@ -27,6 +27,29 @@ function showToast(message) {
   }, 4500);
 }
 
+// ---------- MÁSCARA DE VALOR (R$) ----------
+// formata como o usuário digita: dígitos são lidos da direita pra esquerda
+// (últimos 2 = centavos), com "." de milhar e "," decimal, tipo maquininha
+function formatMoney(cents) {
+  return (cents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function moneyInputToNumber(input) {
+  const digits = input.value.replace(/\D/g, "");
+  return digits ? Number(digits) / 100 : 0;
+}
+
+function setMoneyInput(input, amount) {
+  input.value = amount === null || amount === undefined || amount === "" ? "" : formatMoney(Math.round(Number(amount) * 100));
+}
+
+document.querySelectorAll(".money-input").forEach((input) => {
+  input.addEventListener("input", () => {
+    const digits = input.value.replace(/\D/g, "");
+    input.value = digits ? formatMoney(Number(digits)) : "";
+  });
+});
+
 let user = null;
 let accounts = [];
 let categories = [];
@@ -370,21 +393,46 @@ function txRow(t) {
   const paidPill = canTogglePaid
     ? `<button class="paid-pill ${t.paid ? "paid" : "pending"}" data-toggle-paid>${t.paid ? "PAGO" : "PENDENTE"}</button>`
     : t.kind === "receita"
-      ? `<span class="paid-pill ${isFutureReceita ? "pending" : "paid"}">${isFutureReceita ? "A RECEBER" : "RECEBIDO"}</span>`
+      ? (isFutureReceita
+        ? `<button class="paid-pill pending" data-mark-received>A RECEBER</button>`
+        : t.original_date
+          ? `<button class="paid-pill paid" data-unmark-received>RECEBIDO</button>`
+          : `<span class="paid-pill paid">RECEBIDO</span>`)
       : "";
   const addBtn = canAddValue ? `<button title="Adicionar valor" data-add>+</button>` : "";
   const originLabel = card ? `${card.name} (cartão)` : (acc?.name || "—");
 
   row.innerHTML = `
     <div class="desc">${escapeHtml(t.description)}${badge}</div>
-    <div class="meta">${escapeHtml(originLabel)} · ${escapeHtml(cat?.name || "—")} ${paidPill}</div>
+    <div class="meta">${escapeHtml(originLabel)} · ${escapeHtml(cat?.name || "—")}</div>
+    <div class="status">${paidPill}</div>
     <div class="amount ${t.kind}">${t.kind === "despesa" ? "-" : "+"}${currency.format(t.amount)}</div>
     <div class="row-actions">${addBtn}<button title="Editar" data-edit>✎</button><button title="Excluir" data-del>✕</button></div>`;
   row.querySelector("[data-del]").addEventListener("click", () => deleteTransaction(t));
   row.querySelector("[data-edit]").addEventListener("click", () => editTxModal(t));
   if (canTogglePaid) row.querySelector("[data-toggle-paid]").addEventListener("click", () => togglePaid(t));
+  const markReceivedBtn = row.querySelector("[data-mark-received]");
+  if (markReceivedBtn) markReceivedBtn.addEventListener("click", () => markReceived(t));
+  const unmarkReceivedBtn = row.querySelector("[data-unmark-received]");
+  if (unmarkReceivedBtn) unmarkReceivedBtn.addEventListener("click", () => unmarkReceived(t));
   if (canAddValue) row.querySelector("[data-add]").addEventListener("click", () => openAddValueModal(t));
   return row;
+}
+
+async function markReceived(t) {
+  const { error } = await mutate(
+    supabase.from("transactions").update({ date: toISODate(new Date()), original_date: t.date }).eq("id", t.id)
+  );
+  if (error) return;
+  await refreshMonth();
+}
+
+async function unmarkReceived(t) {
+  const { error } = await mutate(
+    supabase.from("transactions").update({ date: t.original_date, original_date: null }).eq("id", t.id)
+  );
+  if (error) return;
+  await refreshMonth();
 }
 
 async function togglePaid(t) {
@@ -514,7 +562,7 @@ function openCardModal(card) {
   document.getElementById("cardId").value = card?.id || "";
   document.getElementById("cardName").value = card?.name || "";
   document.getElementById("cardBrand").value = card?.brand || "";
-  document.getElementById("cardLimit").value = card?.limit_amount ?? "";
+  setMoneyInput(document.getElementById("cardLimit"), card?.limit_amount ?? "");
   document.getElementById("cardClosingDay").value = card?.closing_day || 25;
   document.getElementById("cardDueDay").value = card?.due_day || 5;
   document.getElementById("cardPaymentAccount").value = card?.payment_account_id || "";
@@ -528,7 +576,7 @@ guardedSubmit("cardForm", async () => {
   const row = {
     name: document.getElementById("cardName").value.trim(),
     brand: document.getElementById("cardBrand").value.trim() || null,
-    limit_amount: document.getElementById("cardLimit").value ? Number(document.getElementById("cardLimit").value) : null,
+    limit_amount: document.getElementById("cardLimit").value.trim() ? moneyInputToNumber(document.getElementById("cardLimit")) : null,
     closing_day: Number(document.getElementById("cardClosingDay").value),
     due_day: Number(document.getElementById("cardDueDay").value),
     payment_account_id: document.getElementById("cardPaymentAccount").value,
@@ -637,7 +685,7 @@ guardedSubmit("cardPurchaseForm", async () => {
   if (!card) return;
 
   const desc = document.getElementById("purchaseDesc").value.trim();
-  const amountInput = Number(document.getElementById("purchaseAmount").value);
+  const amountInput = moneyInputToNumber(document.getElementById("purchaseAmount"));
   const count = Number(document.getElementById("purchaseCount").value);
   const isTotal = document.getElementById("purchaseIsTotal").checked;
   const firstDate = new Date(document.getElementById("purchaseDate").value + "T12:00:00");
@@ -731,6 +779,31 @@ async function changeMonth(delta) {
 function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
 
+// trava o scroll do fundo enquanto qualquer modal-overlay estiver aberto,
+// não importa por qual caminho foi aberto/fechado (openModal, confirmDialog,
+// clique fora, botão de fechar). overflow:hidden sozinho não é confiável
+// (o scroll já em andamento consegue continuar), então fixa o body na
+// posição atual, tipo trava física, e restaura a posição ao fechar.
+let lockedScrollY = 0;
+function updateBodyScrollLock() {
+  const anyOpen = document.querySelector(".modal-overlay.open") !== null;
+  const isLocked = document.body.classList.contains("modal-open");
+  if (anyOpen && !isLocked) {
+    lockedScrollY = window.scrollY;
+    document.body.style.top = `-${lockedScrollY}px`;
+    document.body.classList.add("modal-open");
+  } else if (!anyOpen && isLocked) {
+    document.body.classList.remove("modal-open");
+    document.body.style.top = "";
+    window.scrollTo({ top: lockedScrollY, left: 0, behavior: "instant" });
+  }
+}
+new MutationObserver(updateBodyScrollLock).observe(document.body, {
+  attributes: true,
+  attributeFilter: ["class"],
+  subtree: true,
+});
+
 // evita duplo envio: desabilita o botão de salvar enquanto o handler roda
 function guardedSubmit(formId, handler) {
   const form = document.getElementById(formId);
@@ -812,7 +885,7 @@ function editTxModal(t) {
   document.getElementById("txModalTitle").textContent = t.kind === "receita" ? "Editar receita" : "Editar despesa";
   fillCategorySelect("txCategory", t.kind);
   document.getElementById("txDesc").value = t.description;
-  document.getElementById("txAmount").value = t.amount;
+  setMoneyInput(document.getElementById("txAmount"), t.amount);
   document.getElementById("txDate").value = t.date;
   document.getElementById("txAccount").value = t.account_id || "";
   document.getElementById("txCategory").value = t.category_id || "";
@@ -824,7 +897,7 @@ guardedSubmit("txForm", async () => {
   const kind = document.getElementById("txKind").value;
   const row = {
     description: document.getElementById("txDesc").value.trim(),
-    amount: Number(document.getElementById("txAmount").value),
+    amount: moneyInputToNumber(document.getElementById("txAmount")),
     kind,
     date: document.getElementById("txDate").value,
     account_id: document.getElementById("txAccount").value,
@@ -850,7 +923,7 @@ function openAddValueModal(t) {
 
 guardedSubmit("addValueForm", async () => {
   if (!addValueTarget) return;
-  const extra = Number(document.getElementById("addValueAmount").value);
+  const extra = moneyInputToNumber(document.getElementById("addValueAmount"));
   const newAmount = Number(addValueTarget.amount) + extra;
   const { error } = await mutate(supabase.from("transactions").update({ amount: newAmount }).eq("id", addValueTarget.id));
   if (error) return;
@@ -884,7 +957,7 @@ document.getElementById("instIsTotal").addEventListener("change", (e) => {
 
 guardedSubmit("installmentForm", async () => {
   const desc = document.getElementById("instDesc").value.trim();
-  const amountInput = Number(document.getElementById("instAmount").value);
+  const amountInput = moneyInputToNumber(document.getElementById("instAmount"));
   const count = Number(document.getElementById("instCount").value);
   const isTotal = document.getElementById("instIsTotal").checked;
   const firstDate = new Date(document.getElementById("instDate").value + "T12:00:00");
@@ -972,7 +1045,7 @@ function editRecurringModal(r) {
   document.getElementById("recurringId").value = r.id;
   document.getElementById("recurringModalTitle").textContent = "Editar Despesa Fixa";
   document.getElementById("recDesc").value = r.description;
-  document.getElementById("recAmount").value = r.amount;
+  setMoneyInput(document.getElementById("recAmount"), r.amount);
   document.getElementById("recDay").value = r.day_of_month;
   document.getElementById("recAccount").value = r.account_id || "";
   document.getElementById("recCategory").value = r.category_id || "";
@@ -983,7 +1056,7 @@ guardedSubmit("recurringForm", async () => {
   const id = document.getElementById("recurringId").value;
   const row = {
     description: document.getElementById("recDesc").value.trim(),
-    amount: Number(document.getElementById("recAmount").value),
+    amount: moneyInputToNumber(document.getElementById("recAmount")),
     day_of_month: Number(document.getElementById("recDay").value),
     account_id: document.getElementById("recAccount").value,
     category_id: document.getElementById("recCategory").value,
