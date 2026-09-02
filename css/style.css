@@ -404,9 +404,9 @@ footer{
   main{padding-left:16px;padding-right:16px;}
   .summary-grid{grid-template-columns:1fr 1fr;gap:10px;}
   .summary-grid .card:last-child:nth-child(odd){grid-column:1/-1;}
-  .card{padding:12px;}
-  .card .label{font-size:9px;letter-spacing:0.5px;margin-bottom:6px;}
-  .card .value{font-size:18px;white-space:nowrap;}
+  .card{padding:clamp(10px,3vw,16px);}
+  .card .label{font-size:clamp(8px,2.2vw,11px);letter-spacing:0.5px;margin-bottom:6px;}
+  .card .value{font-size:clamp(16px,5.2vw,24px);white-space:nowrap;}
   .tx-row{
     grid-template-columns:1fr auto;
     grid-template-rows:auto auto auto;
