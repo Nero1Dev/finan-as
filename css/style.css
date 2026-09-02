@@ -385,6 +385,13 @@ h1.page-title{
 footer{
   text-align:center;padding:24px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--bone-dim);letter-spacing:1px;
 }
+.foot-credit{
+  text-align:center;margin-top:10px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.5px;color:var(--bone-dim);
+}
+.foot-credit a{color:var(--bone-dim);text-decoration:underline;transition:color .2s ease;}
+.foot-credit a:hover{color:var(--gold);}
+.foot-credit-fixed{position:fixed;bottom:18px;left:0;right:0;margin-top:0;z-index:2;}
 
 @media (max-width:640px){
   .tx-row{grid-template-columns:1fr auto;grid-template-rows:auto auto;}
