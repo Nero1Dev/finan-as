@@ -401,6 +401,11 @@ footer{
 }
 
 @media (max-width:640px){
+  .summary-grid{grid-template-columns:1fr 1fr;}
+  .summary-grid .card:last-child:nth-child(odd){grid-column:1/-1;}
+  .card{padding:10px;}
+  .card .label{font-size:9px;letter-spacing:0.5px;margin-bottom:6px;}
+  .card .value{font-size:14px;white-space:nowrap;}
   .tx-row{
     grid-template-columns:1fr auto;
     grid-template-rows:auto auto auto;
