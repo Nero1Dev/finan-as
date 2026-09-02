@@ -418,7 +418,7 @@ footer{
   }
   .tx-row .desc{grid-area:desc;}
   .tx-row .meta{grid-area:meta;}
-  .tx-row .amount{grid-area:amount;justify-self:end;}
+  .tx-row .amount{grid-area:amount;justify-self:end;font-size:22px;}
   .tx-row .status{grid-area:status;justify-self:end;}
   .tx-row .row-actions{grid-area:actions;justify-self:end;}
   .paid-pill{font-size:20px;letter-spacing:0.5px;padding:6px 14px;border-radius:5px;}
