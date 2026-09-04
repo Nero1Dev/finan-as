@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "br.com.nairondalmaso.financas.twa",
+        "sha256_cert_fingerprints": ["28:DD:C2:77:BB:B0:E6:43:5C:A7:A5:A9:4E:1F:67:14:75:45:AC:71:71:2C:A0:18:AF:E6:F5:D7:C7:23:1C:4F"]
+      }
+    }]
