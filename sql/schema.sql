@@ -97,6 +97,16 @@ create index if not exists idx_transactions_account on transactions(account_id);
 create index if not exists idx_transactions_group on transactions(installment_group);
 create index if not exists idx_transactions_invoice on transactions(invoice_id);
 
+-- Meses em que uma despesa fixa foi excluída de propósito (pra não ser
+-- gerada de novo naquele mês quando o app checa as despesas fixas).
+create table if not exists recurring_skips (
+  recurring_id uuid not null references recurring_expenses(id) on delete cascade,
+  month text not null,
+  created_by uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (recurring_id, month)
+);
+
 -- ============================================================
 -- RLS — só usuários autenticados (você + a segunda pessoa) acessam.
 -- Cada login só vê e edita suas PRÓPRIAS contas, despesas fixas e
@@ -112,6 +122,7 @@ alter table cards enable row level security;
 alter table invoices enable row level security;
 alter table recurring_expenses enable row level security;
 alter table transactions enable row level security;
+alter table recurring_skips enable row level security;
 
 create policy "auth full access" on categories
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
@@ -129,6 +140,9 @@ create policy "dono ve e edita suas despesas fixas" on recurring_expenses
   for all using (auth.uid() = created_by) with check (auth.uid() = created_by);
 
 create policy "dono ve e edita seus lancamentos" on transactions
+  for all using (auth.uid() = created_by) with check (auth.uid() = created_by);
+
+create policy "dono ve e edita seus meses pulados" on recurring_skips
   for all using (auth.uid() = created_by) with check (auth.uid() = created_by);
 
 -- Categorias padrão

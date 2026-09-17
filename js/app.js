@@ -54,6 +54,7 @@ let user = null;
 let accounts = [];
 let categories = [];
 let recurring = [];
+let recurringSkips = [];
 let cards = [];
 let invoices = [];
 let cardTransactions = []; // todos os lançamentos vinculados a algum cartão, de qualquer mês
@@ -87,10 +88,11 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 
 // ---------- DATA LOADING ----------
 async function loadStaticData() {
-  const [accRes, catRes, recRes, cardRes, invRes, cardTxRes] = await Promise.all([
+  const [accRes, catRes, recRes, skipRes, cardRes, invRes, cardTxRes] = await Promise.all([
     supabase.from("accounts").select("*").eq("archived", false).order("created_at"),
     supabase.from("categories").select("*").order("name"),
     supabase.from("recurring_expenses").select("*").order("created_at"),
+    supabase.from("recurring_skips").select("*"),
     supabase.from("cards").select("*").eq("archived", false).order("created_at"),
     supabase.from("invoices").select("*"),
     supabase.from("transactions").select("*").not("card_id", "is", null),
@@ -98,6 +100,7 @@ async function loadStaticData() {
   accounts = accRes.data || [];
   categories = catRes.data || [];
   recurring = recRes.data || [];
+  recurringSkips = skipRes.data || [];
   cards = cardRes.data || [];
   invoices = invRes.data || [];
   cardTransactions = cardTxRes.data || [];
@@ -142,6 +145,7 @@ async function ensureRecurringForVisibleMonth() {
   const rows = recurring
     .filter((r) => r.active)
     .filter((r) => new Date(r.start_date) <= end && (!r.end_date || new Date(r.end_date) >= start))
+    .filter((r) => !recurringSkips.some((s) => s.recurring_id === r.id && s.month === recurringMonth))
     .map((r) => {
       const day = Math.min(r.day_of_month, daysInMonth(year, month0));
       const date = new Date(year, month0, day);
@@ -1110,7 +1114,19 @@ async function deleteTransaction(t) {
     await refreshMonth();
     return;
   }
-  if (!(await confirmDialog(`Excluir "${t.description}"?`, "Excluir lançamento"))) return;
+  const isFixedOccurrence = !!t.recurring_id;
+  const confirmMsg = isFixedOccurrence
+    ? `Excluir "${t.description}"? Ela não vai ser gerada de novo neste mês.`
+    : `Excluir "${t.description}"?`;
+  if (!(await confirmDialog(confirmMsg, "Excluir lançamento"))) return;
+  if (isFixedOccurrence) {
+    const { error: skipError } = await mutate(supabase.from("recurring_skips").upsert(
+      { recurring_id: t.recurring_id, month: t.recurring_month, created_by: user.id },
+      { onConflict: "recurring_id,month", ignoreDuplicates: true }
+    ));
+    if (skipError) return;
+    recurringSkips.push({ recurring_id: t.recurring_id, month: t.recurring_month });
+  }
   const { error } = await mutate(supabase.from("transactions").delete().eq("id", t.id));
   if (error) return;
   await refreshMonth();
