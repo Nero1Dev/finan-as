@@ -55,12 +55,14 @@ create table if not exists invoices (
   unique (card_id, reference_month)
 );
 
--- Despesas fixas mensais (modelo — gera lançamentos em "transactions")
+-- Despesas fixas mensais (modelo — gera lançamentos em "transactions").
+-- Com card_id, cada ocorrência entra como compra na fatura do cartão.
 create table if not exists recurring_expenses (
   id uuid primary key default gen_random_uuid(),
   description text not null,
   amount numeric(12,2) not null,
   account_id uuid references accounts(id) on delete set null,
+  card_id uuid references cards(id) on delete set null,
   category_id uuid references categories(id) on delete set null,
   day_of_month int not null check (day_of_month between 1 and 28),
   start_date date not null default current_date,

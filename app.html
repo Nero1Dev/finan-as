@@ -352,14 +352,17 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Conta</label>
-          <select id="recAccount" required></select>
+          <label>Pagar com</label>
+          <select id="recPay" required></select>
         </div>
         <div class="field">
           <label>Categoria</label>
           <select id="recCategory" required></select>
         </div>
       </div>
+      <p class="field-hint" id="recPayHint" style="display:none">
+        Todo mês ela entra como compra na fatura desse cartão. Não desconta do saldo na hora: sai só quando você pagar a fatura, então não conta duas vezes.
+      </p>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary btn-block">Salvar</button>
       </div>

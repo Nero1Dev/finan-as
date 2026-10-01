@@ -76,7 +76,7 @@ async function init() {
   document.getElementById("userLabel").textContent = profile?.username || user.email;
 
   await loadStaticData();
-  await ensureRecurringForVisibleMonth();
+  if (await ensureRecurringForVisibleMonth()) await loadStaticData();
   await loadMonthTransactions();
   renderAll();
 
@@ -142,35 +142,59 @@ function daysInMonth(year, month0) {
   return new Date(year, month0 + 1, 0).getDate();
 }
 
+// gera as ocorrências das despesas fixas do mês em foco. As que são no
+// cartão viram compras na fatura do ciclo; pra elas também gera o mês
+// anterior, porque a ocorrência dele cai na fatura que vence neste mês.
+// Retorna true se gerou compra no cartão (aí as faturas precisam recarregar).
 async function ensureRecurringForVisibleMonth() {
   const year = viewDate.getFullYear();
   const month0 = viewDate.getMonth();
-  const { start, end } = monthBounds(viewDate);
-  const recurringMonth = `${year}-${String(month0 + 1).padStart(2, "0")}`;
-
-  const rows = recurring
-    .filter((r) => r.active)
-    .filter((r) => new Date(r.start_date) <= end && (!r.end_date || new Date(r.end_date) >= start))
-    .filter((r) => !recurringSkips.some((s) => s.recurring_id === r.id && s.month === recurringMonth))
-    .map((r) => {
-      const day = Math.min(r.day_of_month, daysInMonth(year, month0));
-      const date = new Date(year, month0, day);
-      return {
+  const months = [
+    { year, month0, cardOnly: false },
+    { ...shiftMonth(year, month0, -1), cardOnly: true },
+  ];
+  const rows = [];
+  let cardRows = 0;
+  for (const m of months) {
+    const start = new Date(m.year, m.month0, 1);
+    const end = new Date(m.year, m.month0 + 1, 0);
+    const recurringMonth = referenceMonthKey(m.year, m.month0);
+    for (const r of recurring) {
+      if (!r.active) continue;
+      if (m.cardOnly && !r.card_id) continue;
+      if (!(new Date(r.start_date) <= end && (!r.end_date || new Date(r.end_date) >= start))) continue;
+      if (recurringSkips.some((s) => s.recurring_id === r.id && s.month === recurringMonth)) continue;
+      const day = Math.min(r.day_of_month, daysInMonth(m.year, m.month0));
+      const date = new Date(m.year, m.month0, day);
+      const base = {
         description: r.description,
         amount: r.amount,
         kind: "despesa",
         date: toISODate(date),
-        account_id: r.account_id,
         category_id: r.category_id,
         recurring_id: r.id,
         recurring_month: recurringMonth,
         paid: false,
         created_by: user.id,
       };
-    });
+      if (r.card_id) {
+        if (cardTransactions.some((t) => t.recurring_id === r.id && t.recurring_month === recurringMonth)) continue;
+        const card = cardById(r.card_id);
+        if (!card) continue;
+        const ref = invoiceReferenceMonth(date, card.closing_day);
+        const inv = await ensureInvoice(card, ref.year, ref.month0);
+        if (!inv) continue;
+        rows.push({ ...base, account_id: null, card_id: card.id, invoice_id: inv.id });
+        cardRows++;
+      } else {
+        rows.push({ ...base, account_id: r.account_id });
+      }
+    }
+  }
 
-  if (rows.length === 0) return;
+  if (rows.length === 0) return false;
   await mutate(supabase.from("transactions").upsert(rows, { onConflict: "recurring_id,recurring_month", ignoreDuplicates: true }));
+  return cardRows > 0;
 }
 
 // ---------- RENDER ----------
@@ -527,11 +551,13 @@ function renderRecurringGrid() {
   }
   for (const r of recurring) {
     const acc = accounts.find((a) => a.id === r.account_id);
+    const payCard = r.card_id ? cardById(r.card_id) : null;
+    const payLabel = payCard ? `Cartão ${payCard.name}` : (acc?.name || "—");
     const card = document.createElement("div");
     card.className = "item-card";
     card.innerHTML = `
       <div class="name">${escapeHtml(r.description)}</div>
-      <div class="type mono">Todo dia ${r.day_of_month} · ${escapeHtml(acc?.name || "—")}</div>
+      <div class="type mono">Todo dia ${r.day_of_month} · ${escapeHtml(payLabel)}</div>
       <div class="balance ${r.active ? "positive" : ""}" style="color:${r.active ? "var(--gold)" : "var(--bone-dim)"}">${currency.format(r.amount)}</div>
       <div class="card-actions">
         <button class="btn btn-outline" data-edit>Editar</button>
@@ -906,6 +932,7 @@ function renderInvoiceModal() {
       const cat = categories.find((c) => c.id === t.category_id);
       const badge = t.installment_total
         ? `<span class="badge">${t.installment_number}/${t.installment_total}</span>`
+        : t.recurring_id ? `<span class="badge">FIXA</span>`
         : t.carryover ? `<span class="badge">SALDO</span>`
           : Number(t.amount) < 0 ? `<span class="badge">ESTORNO</span>` : "";
       const actions = t.carryover
@@ -1260,7 +1287,11 @@ async function deleteInstallments(groupRows, ids) {
 function fillSelects() {
   const accOpts = accounts.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("");
   document.getElementById("txAccount").innerHTML = accOpts;
-  document.getElementById("recAccount").innerHTML = accOpts;
+  document.getElementById("recPay").innerHTML =
+    `<optgroup label="Contas">${accounts.map((a) => `<option value="acc:${a.id}">${escapeHtml(a.name)}</option>`).join("")}</optgroup>` +
+    (cards.length
+      ? `<optgroup label="Cartões de crédito">${cards.map((c) => `<option value="card:${c.id}">${escapeHtml(c.name)} (cartão)</option>`).join("")}</optgroup>`
+      : "");
   document.getElementById("cardPaymentAccount").innerHTML = accOpts;
   fillCategorySelect("txCategory", document.getElementById("txKind").value);
   fillCategorySelect("recCategory", "despesa");
@@ -1293,7 +1324,10 @@ document.getElementById("nextMonth2").addEventListener("click", () => changeMont
 
 async function changeMonth(delta) {
   viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
-  await ensureRecurringForVisibleMonth();
+  if (await ensureRecurringForVisibleMonth()) {
+    await loadStaticData();
+    renderCardsGrid();
+  }
   await loadMonthTransactions();
   renderMonthLabel();
   renderTxList();
@@ -1496,7 +1530,7 @@ function openExpenseModal({ mode = "new", rows = [], presetPay = null, refund = 
     return;
   }
   const sorted = rows.slice().sort((a, b) => (a.installment_number || 1) - (b.installment_number || 1));
-  expState = { mode, rows: sorted, allowCards: mode !== "recurring" };
+  expState = { mode, rows: sorted, allowCards: true };
   document.getElementById("expenseForm").reset();
   fillCategorySelect("expCategory", "despesa");
 
@@ -1534,7 +1568,7 @@ function openExpenseModal({ mode = "new", rows = [], presetPay = null, refund = 
 
 function expAmounts() {
   const amountInput = moneyInputToNumber(document.getElementById("expAmount"));
-  const isRefund = expIsCard() && document.getElementById("expIsRefund").checked;
+  const isRefund = expIsCard() && expState.mode !== "recurring" && document.getElementById("expIsRefund").checked;
   const count = expCount();
   const isTotal = document.getElementById("expIsTotal").checked;
   let amounts = installmentAmounts(amountInput, count, count > 1 && isTotal);
@@ -1545,18 +1579,18 @@ function expAmounts() {
 function expIsCard() { return expPay.startsWith("card:"); }
 function expCount() {
   if (expState.mode === "recurring") return 1;
-  if (expIsCard() && document.getElementById("expIsRefund").checked) return 1;
+  if (expIsCard() && expState.mode !== "recurring" && document.getElementById("expIsRefund").checked) return 1;
   return Math.max(1, Math.min(60, Number(document.getElementById("expCount").value) || 1));
 }
 
 function updateExpenseForm() {
   const isCard = expIsCard();
-  const isRefund = isCard && document.getElementById("expIsRefund").checked;
+  const isRefund = isCard && expState.mode !== "recurring" && document.getElementById("expIsRefund").checked;
   const count = expCount();
   const isTotal = document.getElementById("expIsTotal").checked;
 
   // estorno só faz sentido em compra nova/à vista no cartão
-  const canRefund = isCard && expState.rows.length <= 1;
+  const canRefund = isCard && expState.rows.length <= 1 && expState.mode !== "recurring";
   document.getElementById("expRefundField").style.display = canRefund ? "" : "none";
   document.getElementById("expCountField").style.display = expState.mode === "recurring" || isRefund ? "none" : "";
   document.getElementById("expIsTotalField").style.display = count > 1 ? "" : "none";
@@ -1644,9 +1678,19 @@ guardedSubmit("expenseForm", async () => {
   // despesa simples de conta (ou ocorrência de despesa fixa): só atualiza
   const oldIsPlain = oldRows.length === 1 && !oldRows[0].card_id && !oldRows[0].installment_group;
   if (mode === "recurring" || (oldIsPlain && payType === "acc" && count === 1)) {
-    const { error } = await mutate(supabase.from("transactions").update({
-      description: desc, amount: amounts[0], date: dateStr, account_id: payId, category_id: categoryId,
-    }).eq("id", oldRows[0].id));
+    const changes = { description: desc, amount: amounts[0], date: dateStr, category_id: categoryId };
+    if (payType === "card") {
+      // ocorrência de despesa fixa no cartão: vai pra fatura do ciclo da data
+      const card = cardById(payId);
+      const ref = invoiceReferenceMonth(parseISO(dateStr), card.closing_day);
+      const inv = await ensureInvoice(card, ref.year, ref.month0);
+      if (!inv) return;
+      Object.assign(changes, { account_id: null, card_id: card.id, invoice_id: inv.id });
+      if (!(await confirmPaidInvoiceChanges([{ ...changes, amount: amounts[0] }], oldRows))) return;
+    } else {
+      Object.assign(changes, { account_id: payId, card_id: null, invoice_id: null });
+    }
+    const { error } = await mutate(supabase.from("transactions").update(changes).eq("id", oldRows[0].id));
     if (error) return;
     closeModal("expenseModalOverlay");
     await refreshAll();
@@ -1785,8 +1829,15 @@ document.getElementById("openRecurring").addEventListener("click", () => {
   document.getElementById("recurringId").value = "";
   document.getElementById("recurringModalTitle").textContent = "Despesa Fixa Mensal";
   document.getElementById("recDay").value = 5;
+  updateRecPayHint();
   openModal("recurringModalOverlay");
 });
+
+function updateRecPayHint() {
+  document.getElementById("recPayHint").style.display =
+    document.getElementById("recPay").value.startsWith("card:") ? "" : "none";
+}
+document.getElementById("recPay").addEventListener("change", updateRecPayHint);
 
 function editRecurringModal(r) {
   document.getElementById("recurringId").value = r.id;
@@ -1794,27 +1845,48 @@ function editRecurringModal(r) {
   document.getElementById("recDesc").value = r.description;
   setMoneyInput(document.getElementById("recAmount"), r.amount);
   document.getElementById("recDay").value = r.day_of_month;
-  document.getElementById("recAccount").value = r.account_id || "";
+  const pay = r.card_id ? "card:" + r.card_id : "acc:" + (r.account_id || "");
+  const sel = document.getElementById("recPay");
+  // cartão arquivado continua aparecendo pra não trocar sem querer
+  if (r.card_id && !sel.querySelector(`option[value="${pay}"]`)) {
+    const c = cardById(r.card_id);
+    sel.insertAdjacentHTML("beforeend", `<option value="${pay}">${escapeHtml(c?.name || "Cartão")} (arquivado)</option>`);
+  }
+  sel.value = pay;
   document.getElementById("recCategory").value = r.category_id || "";
+  updateRecPayHint();
   openModal("recurringModalOverlay");
 }
 
 guardedSubmit("recurringForm", async () => {
   const id = document.getElementById("recurringId").value;
+  const [payType, payId] = document.getElementById("recPay").value.split(":");
   const row = {
     description: document.getElementById("recDesc").value.trim(),
     amount: moneyInputToNumber(document.getElementById("recAmount")),
     day_of_month: Number(document.getElementById("recDay").value),
-    account_id: document.getElementById("recAccount").value,
+    account_id: payType === "acc" ? payId : null,
+    card_id: payType === "card" ? payId : null,
     category_id: document.getElementById("recCategory").value,
   };
   const { error } = id
     ? await mutate(supabase.from("recurring_expenses").update(row).eq("id", id))
     : await mutate(supabase.from("recurring_expenses").insert({ ...row, start_date: toISODate(new Date()), active: true, created_by: user.id }));
   if (error) return;
+  if (id) {
+    // recria as ocorrências deste mês em diante com os dados novos (valor,
+    // conta/cartão…). Só fica a despesa de conta que já foi marcada PAGA.
+    const now = new Date();
+    const { data: occ } = await supabase
+      .from("transactions")
+      .select("id,card_id,paid")
+      .eq("recurring_id", id)
+      .gte("recurring_month", referenceMonthKey(now.getFullYear(), now.getMonth()));
+    const ids = (occ || []).filter((t) => t.card_id || !t.paid).map((t) => t.id);
+    if (ids.length) await mutate(supabase.from("transactions").delete().in("id", ids));
+  }
   closeModal("recurringModalOverlay");
   await loadStaticData();
-  renderRecurringGrid();
   await ensureRecurringForVisibleMonth();
   await refreshAll();
 });
