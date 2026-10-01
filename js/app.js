@@ -450,7 +450,7 @@ function txRow(t) {
   row.className = "tx-row" + (t.paid === false || isFutureReceita ? " pending" : "");
   const badge = t.installment_total
     ? `<span class="badge">${t.installment_number}/${t.installment_total}</span>`
-    : t.recurring_id
+    : t.recurring_month
       ? `<span class="badge">FIXA</span>`
       : "";
   const canAddValue = t.kind === "despesa" && !t.installment_total && !t.recurring_id;
@@ -932,7 +932,7 @@ function renderInvoiceModal() {
       const cat = categories.find((c) => c.id === t.category_id);
       const badge = t.installment_total
         ? `<span class="badge">${t.installment_number}/${t.installment_total}</span>`
-        : t.recurring_id ? `<span class="badge">FIXA</span>`
+        : t.recurring_month ? `<span class="badge">FIXA</span>`
         : t.carryover ? `<span class="badge">SALDO</span>`
           : Number(t.amount) < 0 ? `<span class="badge">ESTORNO</span>` : "";
       const actions = t.carryover
@@ -1899,11 +1899,24 @@ async function toggleRecurring(r) {
 }
 
 async function deleteRecurring(r) {
-  if (!(await confirmDialog(`Excluir a despesa fixa "${r.description}"? Lançamentos já gerados são mantidos.`, "Excluir despesa fixa"))) return;
+  const now = new Date();
+  const currentKey = referenceMonthKey(now.getFullYear(), now.getMonth());
+  const choice = await confirmDialog(
+    `Excluir a despesa fixa "${r.description}"? Os lançamentos dos meses seguintes são apagados. ` +
+    `Escolha se os deste mês pra trás ficam no histórico ou se apaga tudo.`,
+    "Excluir despesa fixa",
+    { yesLabel: "Manter até este mês", extraLabel: "Apagar todos os meses" }
+  );
+  if (!choice) return;
+  // apaga os lançamentos antes do cadastro: depois o vínculo (recurring_id) some
+  let query = supabase.from("transactions").delete().eq("recurring_id", r.id);
+  if (choice !== "extra") query = query.gt("recurring_month", currentKey);
+  const { error: txError } = await mutate(query);
+  if (txError) return;
   const { error } = await mutate(supabase.from("recurring_expenses").delete().eq("id", r.id));
   if (error) return;
-  await loadStaticData();
-  renderAll();
+  showToast(choice === "extra" ? "Despesa fixa e todos os lançamentos apagados." : "Despesa fixa excluída. Histórico até este mês mantido.");
+  await refreshAll();
 }
 
 // ---------- EXCLUIR LANÇAMENTO ----------
