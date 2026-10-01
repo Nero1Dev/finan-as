@@ -391,7 +391,9 @@ function renderTxList() {
   el.innerHTML = "";
   // compras no cartão não aparecem soltas: ficam dentro da linha da fatura,
   // que aparece no dia do vencimento. O pagamento também fica embutido nela.
-  const visible = transactions.filter((t) => !t.card_id && !t.pays_invoice_id);
+  // Exceção: despesa fixa no cartão aparece no dia dela (só informativa,
+  // o valor já está no total da fatura).
+  const visible = transactions.filter((t) => (!t.card_id || t.recurring_month) && !t.pays_invoice_id && !t.carryover);
   const dueInvoices = invoicesDueInMonth(viewDate);
   if (visible.length === 0 && dueInvoices.length === 0) {
     el.innerHTML = `<div class="empty-state">Nenhum lançamento neste mês.</div>`;
@@ -442,7 +444,29 @@ function invoiceRow(inv, info) {
   return row;
 }
 
+// despesa fixa no cartão: mostra na lista com a tag FIXA, mas não soma no
+// saldo nem no "a pagar" (quem soma é a fatura onde ela entrou)
+function cardOccurrenceRow(t) {
+  const card = cardById(t.card_id);
+  const inv = invoices.find((i) => i.id === t.invoice_id);
+  const cat = categories.find((c) => c.id === t.category_id);
+  const row = document.createElement("div");
+  row.className = "tx-row card-occurrence";
+  row.innerHTML = `
+    <div class="desc">${escapeHtml(t.description)}<span class="badge">FIXA</span><span class="badge badge-card">CARTÃO</span></div>
+    <div class="meta">${escapeHtml(card?.name || "Cartão")} · ${escapeHtml(cat?.name || "—")}${inv ? ` · já somada na fatura ${invoiceShortLabel(inv)}` : ""}</div>
+    <div class="status">${inv ? `<button class="paid-pill paid" data-open-inv title="Ver fatura">NA FATURA</button>` : ""}</div>
+    <div class="amount despesa muted" title="Não soma no saldo: entra no total da fatura">-${currency.format(t.amount)}</div>
+    <div class="row-actions"><button title="Editar" data-edit>✎</button><button title="Excluir" data-del>✕</button></div>`;
+  row.querySelector("[data-edit]").addEventListener("click", () => editTransaction(t));
+  row.querySelector("[data-del]").addEventListener("click", () => deleteTransaction(t));
+  const open = row.querySelector("[data-open-inv]");
+  if (open) open.addEventListener("click", () => openInvoiceModal(inv.id));
+  return row;
+}
+
 function txRow(t) {
+  if (t.card_id) return cardOccurrenceRow(t);
   const acc = accounts.find((a) => a.id === t.account_id);
   const cat = categories.find((c) => c.id === t.category_id);
   const isFutureReceita = t.kind === "receita" && t.date > toISODate(new Date());

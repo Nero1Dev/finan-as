@@ -442,6 +442,8 @@ footer{
 
 .tx-row.clickable{cursor:pointer;}
 .tx-row.invoice-row .desc .badge{background:var(--bone-dim);}
+.tx-row .desc .badge.badge-card{background:transparent;color:var(--bone-dim);border:1px solid var(--bone-dim);margin-left:4px;}
+.tx-row .amount.muted{opacity:.55;}
 
 /* ===== CARTÕES ===== */
 .card-list{display:flex;flex-direction:column;gap:14px;}
