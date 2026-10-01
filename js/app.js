@@ -407,11 +407,13 @@ function invoiceRow(inv, info) {
     <div class="meta">${escapeHtml(meta)}${canPay ? " · " + statusLabelText(info.status) : ""}</div>
     <div class="status">${canPay ? `<button class="paid-pill pending" data-pay>PAGAR</button>` : statusPill(info.status)}</div>
     <div class="amount despesa">-${currency.format(shown)}</div>
-    <div class="row-actions"><button title="Ver compras da fatura" data-open>☰</button></div>`;
+    <div class="row-actions">${info.payments.length === 1 ? `<button title="Editar pagamento (data, valor, conta)" data-edit-pay>✎</button>` : ""}<button title="Ver compras da fatura" data-open>☰</button></div>`;
   row.addEventListener("click", (e) => {
-    if (e.target.closest("[data-pay]")) return;
+    if (e.target.closest("[data-pay],[data-edit-pay]")) return;
     openInvoiceModal(inv.id);
   });
+  const editPay = row.querySelector("[data-edit-pay]");
+  if (editPay) editPay.addEventListener("click", () => openPayModal(inv, info.payments[0]));
   if (canPay) row.querySelector("[data-pay]").addEventListener("click", () => openPayModal(inv));
   return row;
 }
@@ -929,7 +931,7 @@ function renderInvoiceModal() {
           <div class="meta mono">Conta ${escapeHtml(acc?.name || "—")}</div>
         </div>
         <div class="inv-item-amount credit">${currency.format(p.amount)}</div>
-        <div class="row-actions"><button title="Desfazer pagamento" data-unpay="${p.id}">✕</button></div>
+        <div class="row-actions"><button title="Editar pagamento (data, valor, conta)" data-edit-pay="${p.id}">✎</button><button title="Desfazer pagamento" data-unpay="${p.id}">✕</button></div>
       </div>`;
     }).join("")
     : "";
@@ -969,6 +971,10 @@ function renderInvoiceModal() {
     const t = info.items.find((x) => x.id === b.dataset.del);
     if (t) deleteTransaction(t);
   }));
+  body.querySelectorAll("[data-edit-pay]").forEach((b) => b.addEventListener("click", () => {
+    const p = info.payments.find((x) => x.id === b.dataset.editPay);
+    if (p) openPayModal(inv, p);
+  }));
   body.querySelectorAll("[data-unpay]").forEach((b) => b.addEventListener("click", () => {
     const p = info.payments.find((x) => x.id === b.dataset.unpay);
     if (p) undoPayment(p);
@@ -996,28 +1002,33 @@ async function undoPayment(p) {
 
 // ---------- PAGAR FATURA ----------
 let payTarget = null;
+let payEditing = null; // pagamento existente sendo editado (data/valor/conta)
 
-function openPayModal(inv) {
+function openPayModal(inv, payment = null) {
   const card = cardById(inv.card_id);
   const info = invoiceInfo(inv);
   payTarget = inv;
+  payEditing = payment;
   document.getElementById("payForm").reset();
+  document.getElementById("payModalTitle").textContent = payment ? "Editar pagamento" : "Pagar fatura";
+  document.getElementById("paySubmit").textContent = payment ? "Salvar alterações" : "Confirmar pagamento";
   document.getElementById("payInfo").textContent =
     `Fatura ${card?.name || ""} de ${invoiceLongLabel(inv)}, vence ${fmtDate(inv.due_date)}. ` +
     `Total ${currency.format(info.total)}` +
     (info.paid > 0 ? `, já pago ${currency.format(info.paid)}` : "") +
-    `. Restante: ${currency.format(Math.max(info.remaining, 0))}.`;
-  setMoneyInput(document.getElementById("payAmount"), Math.max(info.remaining, 0));
-  document.getElementById("payDate").value = toISODate(new Date());
+    (payment ? "." : `. Restante: ${currency.format(Math.max(info.remaining, 0))}.`);
+  setMoneyInput(document.getElementById("payAmount"), payment ? payment.amount : Math.max(info.remaining, 0));
+  document.getElementById("payDate").value = payment ? payment.date : toISODate(new Date());
   document.getElementById("payAccount").innerHTML = accounts
     .map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("");
-  document.getElementById("payAccount").value = card?.payment_account_id || accounts[0]?.id || "";
+  document.getElementById("payAccount").value =
+    (payment ? payment.account_id : card?.payment_account_id) || accounts[0]?.id || "";
   updatePayCarry();
   openModal("payModalOverlay");
 }
 
 function payCarryAmount() {
-  if (!payTarget) return 0;
+  if (!payTarget || payEditing) return 0;
   const info = invoiceInfo(payTarget);
   const amount = moneyInputToNumber(document.getElementById("payAmount"));
   return amount > 0 ? round2(info.remaining - amount) : 0;
@@ -1045,6 +1056,19 @@ guardedSubmit("payForm", async () => {
   const amount = moneyInputToNumber(document.getElementById("payAmount"));
   if (amount <= 0) { showToast("Informe o valor pago."); return; }
   const date = document.getElementById("payDate").value;
+
+  if (payEditing) {
+    const { error } = await mutate(supabase.from("transactions").update({
+      amount, date, account_id: document.getElementById("payAccount").value,
+    }).eq("id", payEditing.id));
+    if (error) return;
+    payEditing = null;
+    closeModal("payModalOverlay");
+    showToast("Pagamento atualizado.");
+    await refreshAll();
+    return;
+  }
+
   const rest = payCarryAmount();
   const carry = rest > 0.004 && document.getElementById("payCarry").checked;
 
