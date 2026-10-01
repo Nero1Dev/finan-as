@@ -41,8 +41,9 @@ create table if not exists cards (
 );
 
 -- Faturas do cartão (uma por ciclo mensal). Total/status são calculados
--- a partir das compras (transactions) vinculadas — não ficam guardados
--- aqui, pra nunca dessincronizar.
+-- a partir das compras (transactions.invoice_id) e dos pagamentos
+-- (transactions.pays_invoice_id) — não ficam guardados aqui, pra nunca
+-- dessincronizar. Compras no cartão não mexem no saldo; o pagamento sim.
 create table if not exists invoices (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -85,6 +86,8 @@ create table if not exists transactions (
   recurring_month text,
   card_id uuid references cards(id) on delete set null,
   invoice_id uuid references invoices(id) on delete set null,
+  pays_invoice_id uuid references invoices(id) on delete set null, -- lançamento de pagamento de fatura
+  carryover boolean not null default false, -- restante de fatura jogado pra próxima
   paid boolean not null default true,
   original_date date,
   created_by uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -96,6 +99,7 @@ create index if not exists idx_transactions_date on transactions(date);
 create index if not exists idx_transactions_account on transactions(account_id);
 create index if not exists idx_transactions_group on transactions(installment_group);
 create index if not exists idx_transactions_invoice on transactions(invoice_id);
+create index if not exists idx_transactions_pays_invoice on transactions(pays_invoice_id);
 
 -- Meses em que uma despesa fixa foi excluída de propósito (pra não ser
 -- gerada de novo naquele mês quando o app checa as despesas fixas).

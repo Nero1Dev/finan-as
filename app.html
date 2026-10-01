@@ -51,8 +51,7 @@
       </div>
       <div class="actions">
         <button class="btn btn-outline" id="openTxReceita">+ Receita</button>
-        <button class="btn btn-outline" id="openTxDespesa">+ Despesa</button>
-        <button class="btn btn-primary" id="openInstallment">+ Parcelado</button>
+        <button class="btn btn-primary" id="openTxDespesa">+ Despesa</button>
       </div>
     </div>
     <div id="txList"></div>
@@ -106,7 +105,7 @@
         <button class="btn btn-primary" id="openCard">+ Cartão</button>
       </div>
     </div>
-    <div class="item-grid" id="cardsGrid"></div>
+    <div class="card-list" id="cardsGrid"></div>
   </section>
 
   <!-- ===== TAB: FIXAS ===== -->
@@ -165,48 +164,108 @@
   </div>
 </div>
 
-<!-- ===== MODAL: PARCELADO ===== -->
-<div class="modal-overlay" id="installmentModalOverlay">
+<!-- ===== MODAL: DESPESA (conta ou cartão, à vista ou parcelada) ===== -->
+<div class="modal-overlay" id="expenseModalOverlay">
   <div class="modal">
     <button class="modal-close" data-close>&times;</button>
-    <h2>Despesa Parcelada</h2>
-    <form id="installmentForm">
+    <h2 id="expModalTitle">Nova despesa</h2>
+    <form id="expenseForm">
       <div class="field">
         <label>Descrição</label>
-        <input type="text" id="instDesc" required placeholder="Ex: Notebook">
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label id="instAmountLabel">Valor da parcela (R$)</label>
-          <input type="text" inputmode="decimal" class="money-input" id="instAmount" placeholder="0,00" required>
-        </div>
-        <div class="field">
-          <label>Parcelas</label>
-          <input type="number" id="instCount" min="2" max="60" value="2" required>
-        </div>
+        <input type="text" id="expDesc" required placeholder="Ex: Mercado, Notebook">
       </div>
       <div class="field">
+        <label>Pagar com</label>
+        <div class="chip-group" id="expPayChips"></div>
+      </div>
+      <div class="field" id="expRefundField" style="display:none">
         <label class="checkbox-field">
-          <input type="checkbox" id="instIsTotal">
-          Informei o valor total (dividir pelas parcelas)
+          <input type="checkbox" id="expIsRefund">
+          É estorno / crédito (abate da fatura)
         </label>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>1ª parcela em</label>
-          <input type="date" id="instDate" required>
+          <label id="expAmountLabel">Valor (R$)</label>
+          <input type="text" inputmode="decimal" class="money-input" id="expAmount" placeholder="0,00" required>
+        </div>
+        <div class="field" id="expCountField">
+          <label>Parcelas</label>
+          <input type="number" id="expCount" min="1" max="60" value="1" required>
+        </div>
+      </div>
+      <div class="field" id="expIsTotalField" style="display:none">
+        <label class="checkbox-field">
+          <input type="checkbox" id="expIsTotal" checked>
+          O valor acima é o total (dividir pelas parcelas)
+        </label>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label id="expDateLabel">Data</label>
+          <input type="date" id="expDate" required>
         </div>
         <div class="field">
-          <label>Conta</label>
-          <select id="instAccount" required></select>
+          <label>Categoria</label>
+          <select id="expCategory" required></select>
+        </div>
+      </div>
+      <p class="field-hint warn" id="expCategoryHint" style="display:none">
+        Pra pagar fatura de cartão, use o botão PAGAR na própria fatura. Lançar aqui faz o valor contar duas vezes.
+      </p>
+      <div class="preview-box" id="expPreview" style="display:none"></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary btn-block" id="expSubmit">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MODAL: COMPRA PARCELADA (ver / editar / excluir parcelas) ===== -->
+<div class="modal-overlay" id="groupModalOverlay">
+  <div class="modal modal-wide">
+    <button class="modal-close" data-close>&times;</button>
+    <div id="groupBody"></div>
+  </div>
+</div>
+
+<!-- ===== MODAL: FATURA (detalhe) ===== -->
+<div class="modal-overlay" id="invoiceModalOverlay">
+  <div class="modal modal-wide">
+    <button class="modal-close" data-close>&times;</button>
+    <div id="invoiceBody"></div>
+  </div>
+</div>
+
+<!-- ===== MODAL: PAGAR FATURA ===== -->
+<div class="modal-overlay" id="payModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close>&times;</button>
+    <h2>Pagar fatura</h2>
+    <p class="field-hint" id="payInfo"></p>
+    <form id="payForm">
+      <div class="field-row">
+        <div class="field">
+          <label>Valor pago (R$)</label>
+          <input type="text" inputmode="decimal" class="money-input" id="payAmount" placeholder="0,00" required>
+        </div>
+        <div class="field">
+          <label>Data do pagamento</label>
+          <input type="date" id="payDate" required>
         </div>
       </div>
       <div class="field">
-        <label>Categoria</label>
-        <select id="instCategory" required></select>
+        <label>Saiu da conta</label>
+        <select id="payAccount" required></select>
+      </div>
+      <div class="field" id="payCarryField" style="display:none">
+        <label class="checkbox-field">
+          <input type="checkbox" id="payCarry" checked>
+          <span id="payCarryLabel">Jogar o restante pra próxima fatura</span>
+        </label>
       </div>
       <div class="modal-actions">
-        <button type="submit" class="btn btn-primary btn-block">Criar parcelas</button>
+        <button type="submit" class="btn btn-primary btn-block">Confirmar pagamento</button>
       </div>
     </form>
   </div>
@@ -339,56 +398,10 @@
           <input type="number" id="cardDueDay" min="1" max="28" value="5" required>
         </div>
       </div>
+      <p class="field-hint" id="cardDaysHint"></p>
       <div class="field">
         <label>Conta usada para pagar a fatura</label>
         <select id="cardPaymentAccount" required></select>
-      </div>
-      <div class="modal-actions">
-        <button type="submit" class="btn btn-primary btn-block">Salvar</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- ===== MODAL: COMPRA NO CARTÃO ===== -->
-<div class="modal-overlay" id="cardPurchaseModalOverlay">
-  <div class="modal">
-    <button class="modal-close" data-close>&times;</button>
-    <h2>Compra no Cartão</h2>
-    <form id="cardPurchaseForm">
-      <div class="field">
-        <label>Cartão</label>
-        <select id="purchaseCard" required></select>
-      </div>
-      <div class="field">
-        <label>Descrição</label>
-        <input type="text" id="purchaseDesc" required placeholder="Ex: Notebook, Supermercado">
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label id="purchaseAmountLabel">Valor da parcela (R$)</label>
-          <input type="text" inputmode="decimal" class="money-input" id="purchaseAmount" placeholder="0,00" required>
-        </div>
-        <div class="field">
-          <label>Parcelas</label>
-          <input type="number" id="purchaseCount" min="1" max="60" value="1" required>
-        </div>
-      </div>
-      <div class="field">
-        <label class="checkbox-field">
-          <input type="checkbox" id="purchaseIsTotal">
-          Informei o valor total (dividir pelas parcelas)
-        </label>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Data da compra</label>
-          <input type="date" id="purchaseDate" required>
-        </div>
-        <div class="field">
-          <label>Categoria</label>
-          <select id="purchaseCategory" required></select>
-        </div>
       </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary btn-block">Salvar</button>

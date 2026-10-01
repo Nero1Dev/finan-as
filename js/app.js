@@ -55,9 +55,11 @@ let accounts = [];
 let categories = [];
 let recurring = [];
 let recurringSkips = [];
-let cards = [];
+let cards = []; // só os ativos
+let allCards = []; // inclui arquivados (pra rotular faturas/compras antigas)
 let invoices = [];
 let cardTransactions = []; // todos os lançamentos vinculados a algum cartão, de qualquer mês
+let invoicePayments = []; // lançamentos que pagam fatura (pays_invoice_id)
 let transactions = []; // do mês atual
 let viewDate = new Date(); // dia 1 = mês em foco
 viewDate.setDate(1);
@@ -88,22 +90,25 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 
 // ---------- DATA LOADING ----------
 async function loadStaticData() {
-  const [accRes, catRes, recRes, skipRes, cardRes, invRes, cardTxRes] = await Promise.all([
+  const [accRes, catRes, recRes, skipRes, cardRes, invRes, cardTxRes, payRes] = await Promise.all([
     supabase.from("accounts").select("*").eq("archived", false).order("created_at"),
     supabase.from("categories").select("*").order("name"),
     supabase.from("recurring_expenses").select("*").order("created_at"),
     supabase.from("recurring_skips").select("*"),
-    supabase.from("cards").select("*").eq("archived", false).order("created_at"),
+    supabase.from("cards").select("*").order("created_at"),
     supabase.from("invoices").select("*"),
     supabase.from("transactions").select("*").not("card_id", "is", null),
+    supabase.from("transactions").select("*").not("pays_invoice_id", "is", null),
   ]);
   accounts = accRes.data || [];
   categories = catRes.data || [];
   recurring = recRes.data || [];
   recurringSkips = skipRes.data || [];
-  cards = cardRes.data || [];
+  allCards = cardRes.data || [];
+  cards = allCards.filter((c) => !c.archived);
   invoices = invRes.data || [];
   cardTransactions = cardTxRes.data || [];
+  invoicePayments = payRes.data || [];
 }
 
 function monthBounds(date) {
@@ -112,8 +117,9 @@ function monthBounds(date) {
   return { start, end };
 }
 
+// data local (não UTC): à noite no Brasil o toISOString já virava o dia seguinte
 function toISODate(d) {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 async function loadMonthTransactions() {
@@ -128,7 +134,7 @@ async function loadMonthTransactions() {
 }
 
 async function loadAllTransactionsForBalance() {
-  const { data } = await supabase.from("transactions").select("account_id,kind,amount,paid,date");
+  const { data } = await supabase.from("transactions").select("account_id,kind,amount,paid,date,card_id");
   return data || [];
 }
 
@@ -186,6 +192,7 @@ async function renderSummary() {
   let total = 0;
   for (const a of accounts) balanceByAccount[a.id] = 0;
   for (const t of all) {
+    if (t.card_id) continue; // compra no cartão não mexe no saldo; o pagamento da fatura sim
     if (t.kind === "despesa" && !t.paid) continue; // pendente ainda não saiu da conta
     if (t.kind === "receita" && t.date > todayISO) continue; // ainda não caiu na conta
     const v = Number(t.amount) * (t.kind === "receita" ? 1 : -1);
@@ -193,8 +200,11 @@ async function renderSummary() {
     total += v;
   }
   const pendingThisMonth = transactions
-    .filter((t) => t.kind === "despesa" && !t.paid)
-    .reduce((sum, t) => sum + Number(t.amount), 0);
+    .filter((t) => t.kind === "despesa" && !t.paid && !t.card_id)
+    .reduce((sum, t) => sum + Number(t.amount), 0)
+    + invoicesDueInMonth(viewDate)
+      .filter((x) => x.info.status !== "PAGA")
+      .reduce((sum, x) => sum + Math.max(x.info.remaining, 0), 0);
   const receivableThisMonth = transactions
     .filter((t) => t.kind === "receita" && t.date > todayISO)
     .reduce((sum, t) => sum + Number(t.amount), 0);
@@ -253,6 +263,7 @@ function renderDonut() {
   const totals = {};
   for (const t of transactions) {
     if (t.kind !== "despesa") continue;
+    if (t.pays_invoice_id || t.carryover) continue; // as compras já contam; o pagamento contaria duas vezes
     totals[t.category_id] = (totals[t.category_id] || 0) + Number(t.amount);
   }
 
@@ -354,14 +365,17 @@ function hideDonutTooltip() {
 function renderTxList() {
   const el = document.getElementById("txList");
   el.innerHTML = "";
-  if (transactions.length === 0) {
+  // compras no cartão não aparecem soltas: ficam dentro da linha da fatura,
+  // que aparece no dia do vencimento. O pagamento também fica embutido nela.
+  const visible = transactions.filter((t) => !t.card_id && !t.pays_invoice_id);
+  const dueInvoices = invoicesDueInMonth(viewDate);
+  if (visible.length === 0 && dueInvoices.length === 0) {
     el.innerHTML = `<div class="empty-state">Nenhum lançamento neste mês.</div>`;
     return;
   }
   const groups = {};
-  for (const t of transactions) {
-    (groups[t.date] ||= []).push(t);
-  }
+  for (const x of dueInvoices) (groups[x.inv.due_date] ||= []).push(x);
+  for (const t of visible) (groups[t.date] ||= []).push(t);
   const dates = Object.keys(groups).sort((a, b) => (a < b ? 1 : -1));
   for (const date of dates) {
     const wrap = document.createElement("div");
@@ -370,16 +384,40 @@ function renderTxList() {
     label.className = "tx-day-label mono";
     label.textContent = dayFmt.format(new Date(date + "T12:00:00"));
     wrap.appendChild(label);
-    for (const t of groups[date]) {
-      wrap.appendChild(txRow(t));
+    for (const item of groups[date]) {
+      wrap.appendChild(item.inv ? invoiceRow(item.inv, item.info) : txRow(item));
     }
     el.appendChild(wrap);
   }
 }
 
+function invoiceRow(inv, info) {
+  const card = cardById(inv.card_id);
+  const row = document.createElement("div");
+  row.className = "tx-row invoice-row clickable" + (info.status !== "PAGA" ? " pending" : "");
+  const count = info.purchases.length;
+  const countLabel = `${count} ${count === 1 ? "compra" : "compras"}`;
+  const meta = info.status === "PAGA"
+    ? `Paga${info.lastPaymentDate ? " em " + fmtDayMonth(info.lastPaymentDate) : ""} · ${countLabel}`
+    : `${info.paid > 0 ? `Pago ${currency.format(info.paid)} de ${currency.format(info.total)} · ` : ""}Fecha ${fmtDayMonth(inv.closing_date)} · ${countLabel}`;
+  const shown = info.status === "PAGA" ? info.total : info.remaining;
+  const canPay = info.remaining > 0.004;
+  row.innerHTML = `
+    <div class="desc">Fatura ${escapeHtml(card?.name || "cartão")} · ${invoiceShortLabel(inv)}<span class="badge">FATURA</span></div>
+    <div class="meta">${escapeHtml(meta)}${canPay ? " · " + statusLabelText(info.status) : ""}</div>
+    <div class="status">${canPay ? `<button class="paid-pill pending" data-pay>PAGAR</button>` : statusPill(info.status)}</div>
+    <div class="amount despesa">-${currency.format(shown)}</div>
+    <div class="row-actions"><button title="Ver compras da fatura" data-open>☰</button></div>`;
+  row.addEventListener("click", (e) => {
+    if (e.target.closest("[data-pay]")) return;
+    openInvoiceModal(inv.id);
+  });
+  if (canPay) row.querySelector("[data-pay]").addEventListener("click", () => openPayModal(inv));
+  return row;
+}
+
 function txRow(t) {
   const acc = accounts.find((a) => a.id === t.account_id);
-  const card = t.card_id ? cards.find((c) => c.id === t.card_id) : null;
   const cat = categories.find((c) => c.id === t.category_id);
   const isFutureReceita = t.kind === "receita" && t.date > toISODate(new Date());
   const row = document.createElement("div");
@@ -388,10 +426,8 @@ function txRow(t) {
     ? `<span class="badge">${t.installment_number}/${t.installment_total}</span>`
     : t.recurring_id
       ? `<span class="badge">FIXA</span>`
-      : t.card_id
-        ? `<span class="badge">CARTÃO</span>`
-        : "";
-  const canAddValue = t.kind === "despesa" && !t.installment_total && !t.recurring_id && !t.card_id;
+      : "";
+  const canAddValue = t.kind === "despesa" && !t.installment_total && !t.recurring_id;
   const canTogglePaid = t.kind === "despesa";
 
   const paidPill = canTogglePaid
@@ -404,16 +440,15 @@ function txRow(t) {
           : `<span class="paid-pill paid">RECEBIDO</span>`)
       : "";
   const addBtn = canAddValue ? `<button title="Adicionar valor" data-add>+</button>` : "";
-  const originLabel = card ? `${card.name} (cartão)` : (acc?.name || "—");
 
   row.innerHTML = `
     <div class="desc">${escapeHtml(t.description)}${badge}</div>
-    <div class="meta">${escapeHtml(originLabel)} · ${escapeHtml(cat?.name || "—")}</div>
+    <div class="meta">${escapeHtml(acc?.name || "—")} · ${escapeHtml(cat?.name || "—")}</div>
     <div class="status">${paidPill}</div>
     <div class="amount ${t.kind}">${t.kind === "despesa" ? "-" : "+"}${currency.format(t.amount)}</div>
     <div class="row-actions">${addBtn}<button title="Editar" data-edit>✎</button><button title="Excluir" data-del>✕</button></div>`;
   row.querySelector("[data-del]").addEventListener("click", () => deleteTransaction(t));
-  row.querySelector("[data-edit]").addEventListener("click", () => editTxModal(t));
+  row.querySelector("[data-edit]").addEventListener("click", () => editTransaction(t));
   if (canTogglePaid) row.querySelector("[data-toggle-paid]").addEventListener("click", () => togglePaid(t));
   const markReceivedBtn = row.querySelector("[data-mark-received]");
   if (markReceivedBtn) markReceivedBtn.addEventListener("click", () => markReceived(t));
@@ -423,12 +458,20 @@ function txRow(t) {
   return row;
 }
 
+// abre o editor certo pra cada tipo de lançamento
+function editTransaction(t) {
+  if (t.kind === "receita") return editTxModal(t);
+  if (t.installment_group && t.installment_total) return openGroupModal(t.installment_group);
+  if (t.recurring_id) return openExpenseModal({ mode: "recurring", rows: [t] });
+  return openExpenseModal({ mode: "edit", rows: [t] });
+}
+
 async function markReceived(t) {
   const { error } = await mutate(
     supabase.from("transactions").update({ date: toISODate(new Date()), original_date: t.date }).eq("id", t.id)
   );
   if (error) return;
-  await refreshMonth();
+  await refreshAll();
 }
 
 async function unmarkReceived(t) {
@@ -436,19 +479,14 @@ async function unmarkReceived(t) {
     supabase.from("transactions").update({ date: t.original_date, original_date: null }).eq("id", t.id)
   );
   if (error) return;
-  await refreshMonth();
+  await refreshAll();
 }
 
 async function togglePaid(t) {
   const newPaid = !t.paid;
   const { error } = await mutate(supabase.from("transactions").update({ paid: newPaid }).eq("id", t.id));
   if (error) return;
-  if (t.invoice_id) {
-    const ct = cardTransactions.find((x) => x.id === t.id);
-    if (ct) ct.paid = newPaid;
-    renderCardsGrid();
-  }
-  await refreshMonth();
+  await refreshAll();
 }
 
 function renderAccountsGrid() {
@@ -506,57 +544,161 @@ function renderRecurringGrid() {
 }
 
 // ---------- CARTÕES / FATURAS ----------
+// Modelo: compra no cartão é uma despesa como outra qualquer (conta nos
+// gráficos pela data da compra), mas NÃO mexe no saldo. Quem sai da conta é
+// o pagamento da fatura, que é um lançamento próprio (pays_invoice_id).
+// Total e status da fatura são sempre calculados a partir das compras e
+// pagamentos vinculados. A fatura é nomeada pelo mês de VENCIMENTO.
+const MONTHS_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+
+function cardById(id) { return allCards.find((c) => c.id === id); }
+function parseISO(iso) { return new Date(iso + "T12:00:00"); }
+function pad2(n) { return String(n).padStart(2, "0"); }
+function fmtDayMonth(iso) { const d = parseISO(iso); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`; }
+function fmtDate(iso) { return parseISO(iso).toLocaleDateString("pt-BR"); }
+function round2(n) { return Math.round(n * 100) / 100; }
+function sumAmounts(rows) { return round2(rows.reduce((s, t) => s + Number(t.amount), 0)); }
+function shortMonthLabel(iso) { const d = parseISO(iso); return `${MONTHS_SHORT[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`; }
+function invoiceShortLabel(inv) { return shortMonthLabel(inv.due_date); }
+function invoiceLongLabel(inv) { return monthFmt.format(parseISO(inv.due_date)).toUpperCase(); }
+function creditCardCategoryId() {
+  return categories.find((c) => c.kind === "despesa" && c.name === "Cartão de crédito")?.id || null;
+}
+
+// FUTURA (ciclo ainda não começou, só parcelas) → ABERTA (ciclo atual, até
+// o dia do fechamento) → FECHADA (fechou, não paga) → VENCIDA (passou do
+// vencimento) | PAGA (pagamentos cobrem o total)
+function invoiceInfo(inv) {
+  const items = cardTransactions.filter((t) => t.invoice_id === inv.id);
+  const payments = invoicePayments.filter((t) => t.pays_invoice_id === inv.id);
+  const total = sumAmounts(items);
+  const paid = sumAmounts(payments);
+  const remaining = round2(total - paid);
+  const today = toISODate(new Date());
+  let status;
+  if (items.length === 0 && payments.length === 0) status = "VAZIA";
+  else if (remaining <= 0.004 && (paid > 0 || total <= 0)) status = "PAGA";
+  else if (today <= inv.closing_date) {
+    const card = cardById(inv.card_id);
+    const current = card ? previewInvoice(card, new Date()) : null;
+    status = current && inv.closing_date > current.closing_date ? "FUTURA" : "ABERTA";
+  }
+  else if (today <= inv.due_date) status = "FECHADA";
+  else status = "VENCIDA";
+  const lastPaymentDate = payments.map((p) => p.date).sort().pop() || null;
+  return {
+    items,
+    purchases: items.filter((t) => !t.carryover),
+    payments,
+    total,
+    paid,
+    remaining,
+    status,
+    lastPaymentDate,
+  };
+}
+
+function statusLabelText(status) {
+  return {
+    FUTURA: "futura",
+    ABERTA: "aberta",
+    FECHADA: "fechada",
+    VENCIDA: "vencida",
+    PAGA: "paga",
+  }[status] || "";
+}
+
+function statusPill(status) {
+  return `<span class="status-pill st-${status.toLowerCase()}">${status}</span>`;
+}
+
+function invoicesDueInMonth(date) {
+  const { start, end } = monthBounds(date);
+  const s = toISODate(start), e = toISODate(end);
+  return invoices
+    .filter((i) => i.due_date >= s && i.due_date <= e)
+    .map((inv) => ({ inv, info: invoiceInfo(inv) }))
+    .filter((x) => x.info.status !== "VAZIA");
+}
+
+function cardInvoicesWithInfo(cardId) {
+  return invoices
+    .filter((i) => i.card_id === cardId)
+    .sort((a, b) => (a.due_date < b.due_date ? -1 : 1))
+    .map((inv) => ({ inv, info: invoiceInfo(inv) }))
+    .filter((x) => x.info.status !== "VAZIA");
+}
+
+function bestPurchaseDay(card) {
+  return card.closing_day + 1;
+}
+
 function renderCardsGrid() {
   const grid = document.getElementById("cardsGrid");
   if (!grid) return;
   grid.innerHTML = "";
   if (cards.length === 0) {
-    grid.innerHTML = `<div class="empty-state">Nenhum cartão cadastrado ainda.</div>`;
+    grid.innerHTML = `<div class="empty-state">Nenhum cartão cadastrado ainda. Toque em "+ Cartão" pra começar.</div>`;
     return;
   }
   for (const card of cards) {
-    const cardInvoices = invoices.filter((i) => i.card_id === card.id);
-    const unpaidInvoices = cardInvoices
-      .filter((i) => cardTransactions.some((t) => t.invoice_id === i.id && !t.paid))
-      .sort((a, b) => (a.reference_month < b.reference_month ? -1 : 1)); // mais próxima primeiro
-    const latestInvoice = cardInvoices
-      .slice()
-      .sort((a, b) => (a.reference_month < b.reference_month ? 1 : -1))[0]; // mais recente primeiro
-    const openInvoice = unpaidInvoices[0] || latestInvoice;
+    const all = cardInvoicesWithInfo(card.id);
+    const unpaid = all.filter((x) => x.info.status !== "PAGA");
+    const lastPaid = all.filter((x) => x.info.status === "PAGA").pop();
+    const timeline = [...(lastPaid ? [lastPaid] : []), ...unpaid];
+    const used = round2(unpaid.reduce((s, x) => s + Math.max(x.info.remaining, 0), 0));
+    const toPay = unpaid.find((x) => x.info.status === "VENCIDA")
+      || unpaid.find((x) => x.info.status === "FECHADA")
+      || unpaid[0];
+    const payAcc = accounts.find((a) => a.id === card.payment_account_id);
 
-    let totalLabel = "Sem compras ainda";
-    let statusLabel = "";
-    let dueLabel = "";
-    let hasUnpaid = false;
-    if (openInvoice) {
-      const txs = cardTransactions.filter((t) => t.invoice_id === openInvoice.id);
-      const total = txs.reduce((s, t) => s + Number(t.amount), 0);
-      hasUnpaid = txs.some((t) => !t.paid);
-      const allPaid = txs.length > 0 && txs.every((t) => t.paid);
-      const somePaid = txs.some((t) => t.paid);
-      const status = allPaid ? "PAGA" : somePaid ? "PARCIAL" : "ABERTA";
-      const refLabel = monthFmt.format(new Date(openInvoice.reference_month + "-01T12:00:00")).toUpperCase();
-      totalLabel = currency.format(total);
-      statusLabel = `${refLabel} · ${status}`;
-      dueLabel = `Vence em ${new Date(openInvoice.due_date + "T12:00:00").toLocaleDateString("pt-BR")}`;
+    let limitHtml = "";
+    if (card.limit_amount) {
+      const limit = Number(card.limit_amount);
+      const pct = Math.min(100, Math.max(0, (used / limit) * 100));
+      limitHtml = `
+        <div class="limit-wrap">
+          <div class="limit-bar"><div class="limit-fill${pct > 90 ? " danger" : ""}" style="width:${pct}%"></div></div>
+          <div class="limit-text mono">Usado ${currency.format(used)} · Disponível ${currency.format(Math.max(limit - used, 0))} · Limite ${currency.format(limit)}</div>
+        </div>`;
+    } else if (used > 0) {
+      limitHtml = `<div class="limit-text mono">Em aberto (somando parcelas futuras): ${currency.format(used)}</div>`;
     }
 
-    const payAcc = accounts.find((a) => a.id === card.payment_account_id);
+    const chips = timeline.map(({ inv, info }) => {
+      const shown = info.status === "PAGA" ? info.total : info.remaining;
+      return `<button class="inv-chip st-${info.status.toLowerCase()}" data-inv="${inv.id}">
+        <span class="inv-chip-month">${invoiceShortLabel(inv)}</span>
+        <span class="inv-chip-status">${info.status}</span>
+        <span class="inv-chip-value">${currency.format(shown)}</span>
+      </button>`;
+    }).join("");
+
     const el = document.createElement("div");
-    el.className = "item-card";
+    el.className = "card-panel";
     el.innerHTML = `
-      <div class="name">${escapeHtml(card.name)}${card.brand ? ` · ${escapeHtml(card.brand)}` : ""}</div>
-      <div class="type mono">${escapeHtml(statusLabel || "Sem fatura ainda")}${dueLabel ? " · " + escapeHtml(dueLabel) : ""}</div>
-      <div class="balance" style="color:var(--gold)">${totalLabel}</div>
-      <div class="type mono">Pago pela conta: ${escapeHtml(payAcc?.name || "—")}</div>
+      <div class="card-panel-head">
+        <div>
+          <div class="name">${escapeHtml(card.name)}${card.brand ? ` · ${escapeHtml(card.brand)}` : ""}</div>
+          <div class="type mono">Fecha dia ${card.closing_day} · Vence dia ${card.due_day} · Melhor dia de compra: ${bestPurchaseDay(card)}</div>
+        </div>
+      </div>
+      ${limitHtml}
+      ${chips
+        ? `<div class="invoice-chips">${chips}</div>`
+        : `<div class="type mono" style="margin-top:8px">Nenhuma compra ainda. Use "+ Compra".</div>`}
+      <div class="type mono">Fatura paga pela conta: ${escapeHtml(payAcc?.name || "—")}</div>
       <div class="card-actions">
-        ${hasUnpaid ? `<button class="btn btn-outline" data-pay>Pagar fatura</button>` : ""}
+        <button class="btn btn-primary" data-buy>+ Compra</button>
+        ${toPay ? `<button class="btn btn-outline" data-pay>Pagar ${invoiceShortLabel(toPay.inv)}</button>` : ""}
         <button class="btn btn-outline" data-edit>Editar</button>
         <button class="btn btn-danger" data-del>Arquivar</button>
       </div>`;
+    el.querySelectorAll("[data-inv]").forEach((b) => b.addEventListener("click", () => openInvoiceModal(b.dataset.inv)));
+    el.querySelector("[data-buy]").addEventListener("click", () => openExpenseModal({ presetPay: "card:" + card.id }));
     el.querySelector("[data-edit]").addEventListener("click", () => openCardModal(card));
     el.querySelector("[data-del]").addEventListener("click", () => archiveCard(card));
-    if (hasUnpaid) el.querySelector("[data-pay]").addEventListener("click", () => payInvoice(openInvoice, card));
+    if (toPay) el.querySelector("[data-pay]").addEventListener("click", () => openPayModal(toPay.inv));
     grid.appendChild(el);
   }
 }
@@ -564,16 +706,33 @@ function renderCardsGrid() {
 function openCardModal(card) {
   document.getElementById("cardForm").reset();
   document.getElementById("cardId").value = card?.id || "";
+  document.getElementById("cardModalTitle").textContent = card ? "Editar cartão" : "Novo cartão";
   document.getElementById("cardName").value = card?.name || "";
   document.getElementById("cardBrand").value = card?.brand || "";
   setMoneyInput(document.getElementById("cardLimit"), card?.limit_amount ?? "");
   document.getElementById("cardClosingDay").value = card?.closing_day || 25;
   document.getElementById("cardDueDay").value = card?.due_day || 5;
-  document.getElementById("cardPaymentAccount").value = card?.payment_account_id || "";
+  document.getElementById("cardPaymentAccount").value = card?.payment_account_id || accounts[0]?.id || "";
+  updateCardDaysHint();
   openModal("cardModalOverlay");
 }
 
-document.getElementById("openCard").addEventListener("click", () => openCardModal(null));
+function updateCardDaysHint() {
+  const c = Number(document.getElementById("cardClosingDay").value);
+  const d = Number(document.getElementById("cardDueDay").value);
+  const hint = document.getElementById("cardDaysHint");
+  if (!c || !d) { hint.textContent = ""; return; }
+  hint.textContent =
+    `Compras até o dia ${c} entram na fatura que vence no dia ${d}${d <= c ? " do mês seguinte" : ""}. ` +
+    `Compras a partir do dia ${c + 1} já vão pra fatura seguinte (melhor dia de compra: ${c + 1}).`;
+}
+document.getElementById("cardClosingDay").addEventListener("input", updateCardDaysHint);
+document.getElementById("cardDueDay").addEventListener("input", updateCardDaysHint);
+
+document.getElementById("openCard").addEventListener("click", () => {
+  if (accounts.length === 0) { showToast("Cadastre uma conta antes: é dela que sai o pagamento da fatura."); return; }
+  openCardModal(null);
+});
 
 guardedSubmit("cardForm", async () => {
   const id = document.getElementById("cardId").value;
@@ -590,22 +749,18 @@ guardedSubmit("cardForm", async () => {
     : await mutate(supabase.from("cards").insert({ ...row, user_id: user.id }));
   if (error) return;
   closeModal("cardModalOverlay");
-  await loadStaticData();
-  renderCardsGrid();
-  fillSelects();
+  await refreshAll();
 });
 
 async function archiveCard(card) {
-  if (!(await confirmDialog(`Arquivar o cartão "${card.name}"? As compras já feitas são mantidas.`, "Arquivar cartão"))) return;
+  if (!(await confirmDialog(`Arquivar o cartão "${card.name}"? As compras e faturas já lançadas são mantidas.`, "Arquivar cartão"))) return;
   const { error } = await mutate(supabase.from("cards").update({ archived: true }).eq("id", card.id));
   if (error) return;
-  await loadStaticData();
-  renderCardsGrid();
-  fillSelects();
+  await refreshAll();
 }
 
 // ciclo de fatura: dado o dia de fechamento, acha o mês/ano da fatura que
-// recebe uma compra feita em `date`
+// recebe uma compra feita em `date` (compra no dia do fechamento ainda entra)
 function invoiceReferenceMonth(date, closingDay) {
   let year = date.getFullYear();
   let month0 = date.getMonth();
@@ -614,6 +769,11 @@ function invoiceReferenceMonth(date, closingDay) {
     if (month0 > 11) { month0 = 0; year += 1; }
   }
   return { year, month0 };
+}
+
+function shiftMonth(year, month0, n) {
+  const m = month0 + n;
+  return { year: year + Math.floor(m / 12), month0: ((m % 12) + 12) % 12 };
 }
 
 function invoiceDates(year, month0, closingDay, dueDay) {
@@ -629,6 +789,18 @@ function invoiceDates(year, month0, closingDay, dueDay) {
 
 function referenceMonthKey(year, month0) {
   return `${year}-${String(month0 + 1).padStart(2, "0")}`;
+}
+
+// a fatura (existente ou ainda não criada) que recebe uma compra em `date`,
+// deslocada `offset` meses (parcela N = offset N-1). Não grava nada.
+function previewInvoice(card, date, offset = 0) {
+  const base = invoiceReferenceMonth(date, card.closing_day);
+  const { year, month0 } = shiftMonth(base.year, base.month0, offset);
+  const refMonth = referenceMonthKey(year, month0);
+  const existing = invoices.find((i) => i.card_id === card.id && i.reference_month === refMonth) || null;
+  if (existing) return { year, month0, existing, closing_date: existing.closing_date, due_date: existing.due_date };
+  const { closingDate, dueDate } = invoiceDates(year, month0, card.closing_day, card.due_day);
+  return { year, month0, existing: null, closing_date: toISODate(closingDate), due_date: toISODate(dueDate) };
 }
 
 async function ensureInvoice(card, year, month0) {
@@ -654,61 +826,22 @@ async function ensureInvoice(card, year, month0) {
   return data;
 }
 
-async function payInvoice(invoice, card) {
-  const refLabel = monthFmt.format(new Date(invoice.reference_month + "-01T12:00:00")).toUpperCase();
-  const payAcc = accounts.find((a) => a.id === card.payment_account_id);
-  const ok = await confirmDialog(
-    `Marcar a fatura de ${refLabel} do cartão "${card.name}" como paga? O valor sai da conta "${payAcc?.name || "—"}".`,
-    "Pagar fatura"
-  );
-  if (!ok) return;
-  const { error } = await mutate(
-    supabase.from("transactions").update({ paid: true }).eq("invoice_id", invoice.id).eq("paid", false)
-  );
-  if (error) return;
-  await loadStaticData();
-  renderCardsGrid();
-  await refreshMonth();
-}
-
-document.getElementById("openCardPurchase").addEventListener("click", () => {
-  document.getElementById("cardPurchaseForm").reset();
-  document.getElementById("purchaseDate").value = toISODate(new Date());
-  document.getElementById("purchaseAmountLabel").textContent = "Valor da parcela (R$)";
-  fillCategorySelect("purchaseCategory", "despesa");
-  openModal("cardPurchaseModalOverlay");
-});
-
-document.getElementById("purchaseIsTotal").addEventListener("change", (e) => {
-  document.getElementById("purchaseAmountLabel").textContent = e.target.checked ? "Valor total (R$)" : "Valor da parcela (R$)";
-});
-
-guardedSubmit("cardPurchaseForm", async () => {
-  const cardId = document.getElementById("purchaseCard").value;
-  const card = cards.find((c) => c.id === cardId);
-  if (!card) return;
-
-  const desc = document.getElementById("purchaseDesc").value.trim();
-  const amountInput = moneyInputToNumber(document.getElementById("purchaseAmount"));
-  const count = Number(document.getElementById("purchaseCount").value);
-  const isTotal = document.getElementById("purchaseIsTotal").checked;
-  const firstDate = new Date(document.getElementById("purchaseDate").value + "T12:00:00");
-  const categoryId = document.getElementById("purchaseCategory").value;
-  const groupId = count > 1 ? crypto.randomUUID() : null;
-  const amounts = installmentAmounts(amountInput, count, isTotal);
-
-  let { year, month0 } = invoiceReferenceMonth(firstDate, card.closing_day);
+// monta as linhas de uma compra no cartão (uma por parcela, cada uma na
+// fatura do mês seguinte à anterior), criando as faturas que faltarem
+async function buildCardRows(card, { desc, amounts, firstDate, categoryId, groupId }) {
+  const count = amounts.length;
+  const base = invoiceReferenceMonth(firstDate, card.closing_day);
   const rows = [];
   for (let i = 0; i < count; i++) {
+    const { year, month0 } = shiftMonth(base.year, base.month0, i);
     const inv = await ensureInvoice(card, year, month0);
-    if (!inv) return;
-    const d = addMonthsClamped(firstDate, i);
+    if (!inv) return null;
     rows.push({
       description: desc,
       amount: amounts[i],
       kind: "despesa",
-      date: toISODate(d),
-      account_id: card.payment_account_id,
+      date: toISODate(addMonthsClamped(firstDate, i)),
+      account_id: null,
       category_id: categoryId,
       installment_number: count > 1 ? i + 1 : null,
       installment_total: count > 1 ? count : null,
@@ -718,31 +851,395 @@ guardedSubmit("cardPurchaseForm", async () => {
       paid: false,
       created_by: user.id,
     });
-    month0 += 1;
-    if (month0 > 11) { month0 = 0; year += 1; }
+  }
+  return rows;
+}
+
+// avisa quando uma compra nova/editada muda o total de uma fatura já paga
+async function confirmPaidInvoiceChanges(newRows, oldRows) {
+  const delta = {};
+  for (const r of newRows) if (r.invoice_id) delta[r.invoice_id] = (delta[r.invoice_id] || 0) + Number(r.amount);
+  for (const r of oldRows) if (r.invoice_id) delta[r.invoice_id] = (delta[r.invoice_id] || 0) - Number(r.amount);
+  const touched = Object.entries(delta)
+    .filter(([, d]) => Math.abs(d) > 0.004)
+    .map(([id]) => invoices.find((i) => i.id === id))
+    .filter((inv) => inv && invoiceInfo(inv).status === "PAGA");
+  if (touched.length === 0) return true;
+  const labels = touched.map(invoiceShortLabel).join(", ");
+  return await confirmDialog(
+    `A fatura de ${labels} já foi paga. Essa mudança altera o total dela e a diferença fica em aberto (dá pra pagar depois). Continuar?`,
+    "Fatura já paga",
+    { yesLabel: "Continuar" }
+  );
+}
+
+document.getElementById("openCardPurchase").addEventListener("click", () => {
+  if (cards.length === 0) { showToast("Cadastre um cartão primeiro (botão \"+ Cartão\")."); return; }
+  openExpenseModal({ presetPay: "card:" + cards[0].id });
+});
+
+// ---------- DETALHE DA FATURA ----------
+let openInvoiceId = null;
+
+function openInvoiceModal(id) {
+  openInvoiceId = id;
+  renderInvoiceModal();
+  openModal("invoiceModalOverlay");
+}
+
+function renderInvoiceModal() {
+  const body = document.getElementById("invoiceBody");
+  const inv = invoices.find((i) => i.id === openInvoiceId);
+  if (!inv) { closeModal("invoiceModalOverlay"); return; }
+  const card = cardById(inv.card_id);
+  const info = invoiceInfo(inv);
+  const siblings = cardInvoicesWithInfo(inv.card_id).map((x) => x.inv);
+  const idx = siblings.findIndex((i) => i.id === inv.id);
+  const prev = idx > 0 ? siblings[idx - 1] : null;
+  const next = idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : null;
+
+  const items = info.items.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const itemsHtml = items.length
+    ? items.map((t) => {
+      const cat = categories.find((c) => c.id === t.category_id);
+      const badge = t.installment_total
+        ? `<span class="badge">${t.installment_number}/${t.installment_total}</span>`
+        : t.carryover ? `<span class="badge">SALDO</span>`
+          : Number(t.amount) < 0 ? `<span class="badge">ESTORNO</span>` : "";
+      const actions = t.carryover
+        ? `<button title="Desfazer" data-del="${t.id}">✕</button>`
+        : `<button title="Editar" data-edit="${t.id}">✎</button><button title="Excluir" data-del="${t.id}">✕</button>`;
+      return `<div class="inv-item">
+        <div class="inv-item-main">
+          <div class="desc">${escapeHtml(t.description)}${badge}</div>
+          <div class="meta mono">${fmtDayMonth(t.date)} · ${escapeHtml(cat?.name || "—")}</div>
+        </div>
+        <div class="inv-item-amount ${Number(t.amount) < 0 ? "credit" : ""}">${currency.format(t.amount)}</div>
+        <div class="row-actions">${actions}</div>
+      </div>`;
+    }).join("")
+    : `<div class="empty-state small">Nenhuma compra nesta fatura.</div>`;
+
+  const paymentsHtml = info.payments.length
+    ? `<div class="eyebrow mono section-gap">PAGAMENTOS</div>` + info.payments.map((p) => {
+      const acc = accounts.find((a) => a.id === p.account_id);
+      return `<div class="inv-item">
+        <div class="inv-item-main">
+          <div class="desc">Pago em ${fmtDate(p.date)}</div>
+          <div class="meta mono">Conta ${escapeHtml(acc?.name || "—")}</div>
+        </div>
+        <div class="inv-item-amount credit">${currency.format(p.amount)}</div>
+        <div class="row-actions"><button title="Desfazer pagamento" data-unpay="${p.id}">✕</button></div>
+      </div>`;
+    }).join("")
+    : "";
+
+  const remainingLabel = info.remaining < -0.004 ? "Crédito" : "Restante";
+  body.innerHTML = `
+    <div class="inv-head">
+      <button class="nav-btn" data-prev ${prev ? "" : "disabled"} title="Fatura anterior">‹</button>
+      <div class="inv-head-title">
+        <div class="eyebrow mono">${escapeHtml(card?.name || "Cartão")}</div>
+        <h2>Fatura ${invoiceLongLabel(inv)}</h2>
+      </div>
+      <button class="nav-btn" data-next ${next ? "" : "disabled"} title="Próxima fatura">›</button>
+    </div>
+    <div class="inv-dates mono">${statusPill(info.status)} Fecha ${fmtDate(inv.closing_date)} · Vence ${fmtDate(inv.due_date)}</div>
+    <div class="inv-totals">
+      <div><span class="mono">TOTAL</span><strong>${currency.format(info.total)}</strong></div>
+      <div><span class="mono">PAGO</span><strong>${currency.format(info.paid)}</strong></div>
+      <div><span class="mono">${remainingLabel.toUpperCase()}</span><strong class="${info.remaining > 0.004 ? "neg" : ""}">${currency.format(Math.abs(info.remaining))}</strong></div>
+    </div>
+    <div class="eyebrow mono section-gap">COMPRAS</div>
+    ${itemsHtml}
+    ${paymentsHtml}
+    <div class="modal-actions">
+      ${card && !card.archived ? `<button class="btn btn-outline btn-block" data-buy>+ Compra</button>
+      <button class="btn btn-outline btn-block" data-refund>+ Estorno</button>` : ""}
+      ${info.remaining > 0.004 ? `<button class="btn btn-primary btn-block" data-pay>Pagar ${currency.format(info.remaining)}</button>` : ""}
+    </div>`;
+
+  if (prev) body.querySelector("[data-prev]").addEventListener("click", () => { openInvoiceId = prev.id; renderInvoiceModal(); });
+  if (next) body.querySelector("[data-next]").addEventListener("click", () => { openInvoiceId = next.id; renderInvoiceModal(); });
+  body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => {
+    const t = info.items.find((x) => x.id === b.dataset.edit);
+    if (t) editTransaction(t);
+  }));
+  body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => {
+    const t = info.items.find((x) => x.id === b.dataset.del);
+    if (t) deleteTransaction(t);
+  }));
+  body.querySelectorAll("[data-unpay]").forEach((b) => b.addEventListener("click", () => {
+    const p = info.payments.find((x) => x.id === b.dataset.unpay);
+    if (p) undoPayment(p);
+  }));
+  const buy = body.querySelector("[data-buy]");
+  if (buy) buy.addEventListener("click", () => openExpenseModal({ presetPay: "card:" + card.id }));
+  const refund = body.querySelector("[data-refund]");
+  if (refund) refund.addEventListener("click", () => openExpenseModal({ presetPay: "card:" + card.id, refund: true }));
+  const pay = body.querySelector("[data-pay]");
+  if (pay) pay.addEventListener("click", () => openPayModal(inv));
+}
+
+async function undoPayment(p) {
+  const acc = accounts.find((a) => a.id === p.account_id);
+  const ok = await confirmDialog(
+    `Desfazer o pagamento de ${currency.format(p.amount)} de ${fmtDate(p.date)}? O valor volta pro saldo da conta "${acc?.name || "—"}".`,
+    "Desfazer pagamento",
+    { yesLabel: "Desfazer" }
+  );
+  if (!ok) return;
+  const { error } = await mutate(supabase.from("transactions").delete().eq("id", p.id));
+  if (error) return;
+  await refreshAll();
+}
+
+// ---------- PAGAR FATURA ----------
+let payTarget = null;
+
+function openPayModal(inv) {
+  const card = cardById(inv.card_id);
+  const info = invoiceInfo(inv);
+  payTarget = inv;
+  document.getElementById("payForm").reset();
+  document.getElementById("payInfo").textContent =
+    `Fatura ${card?.name || ""} de ${invoiceLongLabel(inv)}, vence ${fmtDate(inv.due_date)}. ` +
+    `Total ${currency.format(info.total)}` +
+    (info.paid > 0 ? `, já pago ${currency.format(info.paid)}` : "") +
+    `. Restante: ${currency.format(Math.max(info.remaining, 0))}.`;
+  setMoneyInput(document.getElementById("payAmount"), Math.max(info.remaining, 0));
+  document.getElementById("payDate").value = toISODate(new Date());
+  document.getElementById("payAccount").innerHTML = accounts
+    .map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("");
+  document.getElementById("payAccount").value = card?.payment_account_id || accounts[0]?.id || "";
+  updatePayCarry();
+  openModal("payModalOverlay");
+}
+
+function payCarryAmount() {
+  if (!payTarget) return 0;
+  const info = invoiceInfo(payTarget);
+  const amount = moneyInputToNumber(document.getElementById("payAmount"));
+  return amount > 0 ? round2(info.remaining - amount) : 0;
+}
+
+function updatePayCarry() {
+  const rest = payCarryAmount();
+  const field = document.getElementById("payCarryField");
+  field.style.display = rest > 0.004 ? "" : "none";
+  if (rest > 0.004) {
+    const card = cardById(payTarget.card_id);
+    const [y, m] = payTarget.reference_month.split("-").map(Number);
+    const nextRef = shiftMonth(y, m - 1, 1);
+    const { dueDate } = invoiceDates(nextRef.year, nextRef.month0, card.closing_day, card.due_day);
+    document.getElementById("payCarryLabel").textContent =
+      `Jogar o restante (${currency.format(rest)}) pra fatura de ${shortMonthLabel(toISODate(dueDate))}`;
+  }
+}
+document.getElementById("payAmount").addEventListener("input", updatePayCarry);
+
+guardedSubmit("payForm", async () => {
+  const inv = payTarget;
+  if (!inv) return;
+  const card = cardById(inv.card_id);
+  const amount = moneyInputToNumber(document.getElementById("payAmount"));
+  if (amount <= 0) { showToast("Informe o valor pago."); return; }
+  const date = document.getElementById("payDate").value;
+  const rest = payCarryAmount();
+  const carry = rest > 0.004 && document.getElementById("payCarry").checked;
+
+  const { error } = await mutate(supabase.from("transactions").insert({
+    description: `Pagamento fatura ${card?.name || ""} · ${invoiceShortLabel(inv)}`,
+    amount,
+    kind: "despesa",
+    date,
+    account_id: document.getElementById("payAccount").value,
+    category_id: creditCardCategoryId(),
+    paid: true,
+    pays_invoice_id: inv.id,
+    created_by: user.id,
+  }));
+  if (error) return;
+
+  if (carry && card) {
+    // par de lançamentos: tira o restante desta fatura e soma na próxima
+    const [y, m] = inv.reference_month.split("-").map(Number);
+    const nextRef = shiftMonth(y, m - 1, 1);
+    const nextInv = await ensureInvoice(card, nextRef.year, nextRef.month0);
+    if (nextInv) {
+      const pair = crypto.randomUUID();
+      const base = {
+        kind: "despesa", date, account_id: null, category_id: creditCardCategoryId(),
+        card_id: card.id, carryover: true, installment_group: pair, paid: false, created_by: user.id,
+      };
+      await mutate(supabase.from("transactions").insert([
+        { ...base, description: `Restante passado pra fatura ${invoiceShortLabel(nextInv)}`, amount: -rest, invoice_id: inv.id },
+        { ...base, description: `Restante da fatura ${invoiceShortLabel(inv)}`, amount: rest, invoice_id: nextInv.id },
+      ]));
+    }
+  }
+  closeModal("payModalOverlay");
+  showToast(`Pagamento de ${currency.format(amount)} registrado.`);
+  await refreshAll();
+});
+
+// ---------- COMPRA PARCELADA (ver / editar / excluir parcelas) ----------
+let openGroupId = null;
+
+async function fetchGroup(groupId) {
+  const { data } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("installment_group", groupId)
+    .order("installment_number");
+  return data || [];
+}
+
+async function openGroupModal(groupId) {
+  openGroupId = groupId;
+  const ok = await renderGroupModal();
+  if (ok) openModal("groupModalOverlay");
+}
+
+async function renderGroupModal() {
+  const body = document.getElementById("groupBody");
+  const rows = await fetchGroup(openGroupId);
+  if (rows.length === 0) { closeModal("groupModalOverlay"); return false; }
+  const first = rows[0];
+  const card = first.card_id ? cardById(first.card_id) : null;
+  const acc = accounts.find((a) => a.id === first.account_id);
+  const cat = categories.find((c) => c.id === first.category_id);
+  const total = sumAmounts(rows);
+
+  // parcelas que ainda vão cair em faturas depois da fatura atual
+  let futureRows = [];
+  let currentInv = null;
+  if (card) {
+    currentInv = previewInvoice(card, new Date());
+    futureRows = rows.filter((r) => {
+      const inv = invoices.find((i) => i.id === r.invoice_id);
+      return inv && inv.due_date > currentInv.due_date;
+    });
   }
 
-  const { error } = await mutate(supabase.from("transactions").insert(rows));
+  const list = rows.map((r) => {
+    let where, pill;
+    if (card) {
+      const inv = invoices.find((i) => i.id === r.invoice_id);
+      const info = inv ? invoiceInfo(inv) : null;
+      where = inv ? `Fatura ${invoiceShortLabel(inv)}` : fmtDate(r.date);
+      pill = info ? statusPill(info.status) : "";
+    } else {
+      where = fmtDate(r.date);
+      pill = `<button class="paid-pill ${r.paid ? "paid" : "pending"}" data-toggle="${r.id}">${r.paid ? "PAGO" : "PENDENTE"}</button>`;
+    }
+    return `<div class="inst-row">
+      <span class="badge">${r.installment_number}/${r.installment_total}</span>
+      <span class="inst-where mono">${where}</span>
+      <span class="inst-pill">${pill}</span>
+      <span class="inst-amount">${currency.format(r.amount)}</span>
+      <button class="inst-del" title="Excluir só esta parcela" data-del-one="${r.id}">✕</button>
+    </div>`;
+  }).join("");
+
+  body.innerHTML = `
+    <div class="eyebrow mono">COMPRA PARCELADA</div>
+    <h2>${escapeHtml(first.description)}</h2>
+    <p class="field-hint">
+      ${card ? `Cartão ${escapeHtml(card.name)}` : `Conta ${escapeHtml(acc?.name || "—")}`} ·
+      ${rows.length}x · total ${currency.format(total)} · ${escapeHtml(cat?.name || "—")}
+    </p>
+    <button class="btn btn-primary btn-block" data-edit-group>✎ Editar compra (valor, nº de parcelas, data…)</button>
+    <div class="eyebrow mono section-gap">PARCELAS</div>
+    <div class="inst-list">${list}</div>
+    <div class="modal-actions">
+      ${futureRows.length ? `<button class="btn btn-outline btn-block" data-anticipate>Antecipar ${futureRows.length} parcela(s)</button>` : ""}
+      <button class="btn btn-danger btn-block" data-del-all>Excluir todas as ${rows.length} parcelas</button>
+    </div>`;
+
+  body.querySelector("[data-edit-group]").addEventListener("click", () => {
+    closeModal("groupModalOverlay");
+    openExpenseModal({ mode: "edit", rows });
+  });
+  body.querySelectorAll("[data-del-one]").forEach((b) => b.addEventListener("click", async () => {
+    const r = rows.find((x) => x.id === b.dataset.delOne);
+    const ok = await confirmDialog(
+      `Excluir a parcela ${r.installment_number}/${r.installment_total} (${currency.format(r.amount)})? As outras são renumeradas.`,
+      "Excluir parcela",
+      { yesLabel: "Excluir" }
+    );
+    if (!ok) return;
+    await deleteInstallments(rows, [r.id]);
+  }));
+  body.querySelectorAll("[data-toggle]").forEach((b) => b.addEventListener("click", () => {
+    const r = rows.find((x) => x.id === b.dataset.toggle);
+    togglePaid(r);
+  }));
+  body.querySelector("[data-del-all]").addEventListener("click", async () => {
+    const ok = await confirmDialog(
+      `Excluir a compra "${first.description}" inteira (${rows.length} parcelas, ${currency.format(total)})?`,
+      "Excluir compra",
+      { yesLabel: "Excluir tudo" }
+    );
+    if (!ok) return;
+    const { error } = await mutate(supabase.from("transactions").delete().eq("installment_group", openGroupId));
+    if (error) return;
+    closeModal("groupModalOverlay");
+    showToast("Compra excluída.");
+    await refreshAll();
+  });
+  const anticipate = body.querySelector("[data-anticipate]");
+  if (anticipate) anticipate.addEventListener("click", async () => {
+    const sum = sumAmounts(futureRows);
+    const ok = await confirmDialog(
+      `Trazer ${futureRows.length} parcela(s) (${currency.format(sum)}) pra fatura de ${shortMonthLabel(currentInv.due_date)}? ` +
+      `Se o banco deu desconto, edite o valor depois.`,
+      "Antecipar parcelas",
+      { yesLabel: "Antecipar" }
+    );
+    if (!ok) return;
+    const inv = await ensureInvoice(card, currentInv.year, currentInv.month0);
+    if (!inv) return;
+    const { error } = await mutate(
+      supabase.from("transactions")
+        .update({ invoice_id: inv.id, date: toISODate(new Date()) })
+        .in("id", futureRows.map((r) => r.id))
+    );
+    if (error) return;
+    showToast("Parcelas antecipadas.");
+    await refreshAll();
+  });
+  return true;
+}
+
+// exclui algumas parcelas de um grupo e renumera as que sobrarem
+// (1/9, 2/9…); se sobrar uma só, ela vira compra à vista
+async function deleteInstallments(groupRows, ids) {
+  const { error } = await mutate(supabase.from("transactions").delete().in("id", ids));
   if (error) return;
-  closeModal("cardPurchaseModalOverlay");
-  await loadStaticData();
-  renderCardsGrid();
-  await refreshMonth();
-});
+  const left = groupRows
+    .filter((r) => !ids.includes(r.id))
+    .sort((a, b) => a.installment_number - b.installment_number);
+  if (left.length === 1) {
+    await mutate(supabase.from("transactions")
+      .update({ installment_number: null, installment_total: null, installment_group: null })
+      .eq("id", left[0].id));
+  } else if (left.length > 1) {
+    await Promise.all(left.map((r, i) => mutate(
+      supabase.from("transactions").update({ installment_number: i + 1, installment_total: left.length }).eq("id", r.id)
+    )));
+  }
+  showToast(left.length ? `Parcela excluída. Agora são ${left.length}x.` : "Compra excluída.");
+  await refreshAll();
+}
 
 function fillSelects() {
   const accOpts = accounts.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("");
   document.getElementById("txAccount").innerHTML = accOpts;
-  document.getElementById("instAccount").innerHTML = accOpts;
   document.getElementById("recAccount").innerHTML = accOpts;
   document.getElementById("cardPaymentAccount").innerHTML = accOpts;
-  document.getElementById("purchaseCard").innerHTML = cards
-    .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
-    .join("");
   fillCategorySelect("txCategory", document.getElementById("txKind").value);
-  fillCategorySelect("instCategory", "despesa");
   fillCategorySelect("recCategory", "despesa");
-  fillCategorySelect("purchaseCategory", "despesa");
 }
 
 function fillCategorySelect(id, kind) {
@@ -777,11 +1274,20 @@ async function changeMonth(delta) {
   renderMonthLabel();
   renderTxList();
   renderDonut();
+  renderSummary();
 }
 
 // ---------- MODAL HELPERS ----------
-function openModal(id) { document.getElementById(id).classList.add("open"); }
+// cada modal aberto ganha um z-index maior que o anterior, pra quem abre
+// por cima de outro (ex: editar compra a partir da fatura) ficar na frente
+let modalZ = 100;
+function openModal(id) {
+  const el = document.getElementById(id);
+  el.style.zIndex = ++modalZ;
+  el.classList.add("open");
+}
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+function isModalOpen(id) { return document.getElementById(id).classList.contains("open"); }
 
 // trava o scroll do fundo enquanto qualquer modal-overlay estiver aberto,
 // não importa por qual caminho foi aberto/fechado (openModal, confirmDialog,
@@ -859,6 +1365,7 @@ function confirmDialog(message, title = "Confirmar", { yesLabel = "Confirmar", e
     noBtn.addEventListener("click", onNo);
     extraBtn.addEventListener("click", onExtra);
     overlay.addEventListener("click", onOverlay);
+    overlay.style.zIndex = ++modalZ;
     overlay.classList.add("open");
   });
 }
@@ -869,9 +1376,9 @@ document.querySelectorAll(".modal-overlay").forEach((ov) => {
   ov.addEventListener("click", (e) => { if (e.target === ov) ov.classList.remove("open"); });
 });
 
-// ---------- TRANSAÇÃO SIMPLES ----------
+// ---------- RECEITA (modal simples) ----------
 document.getElementById("openTxReceita").addEventListener("click", () => openTxModal("receita"));
-document.getElementById("openTxDespesa").addEventListener("click", () => openTxModal("despesa"));
+document.getElementById("openTxDespesa").addEventListener("click", () => openExpenseModal());
 
 function openTxModal(kind) {
   document.getElementById("txId").value = "";
@@ -912,7 +1419,265 @@ guardedSubmit("txForm", async () => {
     : await mutate(supabase.from("transactions").insert({ ...row, created_by: user.id }));
   if (error) return;
   closeModal("txModalOverlay");
-  await refreshMonth();
+  await refreshAll();
+});
+
+// ---------- DESPESA (conta ou cartão, à vista ou parcelada) ----------
+// Um modal só pra lançar e editar qualquer despesa. "Pagar com" decide se
+// sai de uma conta ou entra na fatura de um cartão. Editar uma compra
+// parcelada recria todas as parcelas a partir do formulário (dá pra mudar
+// o nº de parcelas, o valor, a data e até o cartão de uma vez).
+let expState = { mode: "new", rows: [], allowCards: true };
+let expPay = ""; // "acc:<id>" | "card:<id>"
+const LAST_PAY_KEY = "financas:lastPay";
+
+function readLastPay() {
+  try { return localStorage.getItem(LAST_PAY_KEY) || ""; } catch { return ""; }
+}
+function saveLastPay(v) {
+  try { localStorage.setItem(LAST_PAY_KEY, v); } catch { /* sem storage, tudo bem */ }
+}
+
+function payOptions() {
+  const opts = accounts.map((a) => ({ value: "acc:" + a.id, label: a.name, kind: "conta" }));
+  if (expState.allowCards) {
+    for (const c of cards) opts.push({ value: "card:" + c.id, label: c.name, kind: "cartão" });
+    // compra de um cartão já arquivado continua editável
+    if (expPay.startsWith("card:") && !opts.some((o) => o.value === expPay)) {
+      const c = cardById(expPay.slice(5));
+      if (c) opts.push({ value: expPay, label: c.name + " (arquivado)", kind: "cartão" });
+    }
+  }
+  return opts;
+}
+
+function renderPayChips() {
+  const el = document.getElementById("expPayChips");
+  const opts = payOptions();
+  if (!opts.some((o) => o.value === expPay)) expPay = opts[0]?.value || "";
+  el.innerHTML = opts.map((o) => `
+    <button type="button" class="chip ${o.value === expPay ? "active" : ""} ${o.kind === "cartão" ? "chip-card" : ""}" data-pay="${o.value}">
+      <span class="chip-kind">${o.kind}</span>${escapeHtml(o.label)}
+    </button>`).join("");
+  el.querySelectorAll("[data-pay]").forEach((b) => b.addEventListener("click", () => {
+    expPay = b.dataset.pay;
+    renderPayChips();
+    updateExpenseForm();
+  }));
+}
+
+function openExpenseModal({ mode = "new", rows = [], presetPay = null, refund = false } = {}) {
+  if (accounts.length === 0 && cards.length === 0) {
+    showToast("Cadastre uma conta ou um cartão primeiro.");
+    return;
+  }
+  const sorted = rows.slice().sort((a, b) => (a.installment_number || 1) - (b.installment_number || 1));
+  expState = { mode, rows: sorted, allowCards: mode !== "recurring" };
+  document.getElementById("expenseForm").reset();
+  fillCategorySelect("expCategory", "despesa");
+
+  const isCardEdit = sorted.some((r) => r.card_id);
+  document.getElementById("expModalTitle").textContent =
+    mode === "new" ? (refund ? "Estorno no cartão" : "Nova despesa")
+      : isCardEdit || sorted.length > 1 ? "Editar compra" : "Editar despesa";
+  document.getElementById("expSubmit").textContent = mode === "new" ? "Salvar" : "Salvar alterações";
+
+  if (mode === "new") {
+    expPay = presetPay || readLastPay();
+    document.getElementById("expDate").value = toISODate(new Date());
+    document.getElementById("expCount").value = 1;
+    document.getElementById("expIsTotal").checked = true;
+    document.getElementById("expIsRefund").checked = refund;
+  } else {
+    const first = sorted[0];
+    expPay = first.card_id ? "card:" + first.card_id : "acc:" + (first.account_id || "");
+    document.getElementById("expDesc").value = first.description;
+    document.getElementById("expCategory").value = first.category_id || "";
+    const total = sumAmounts(sorted);
+    const isRefund = total < 0;
+    document.getElementById("expIsRefund").checked = isRefund;
+    setMoneyInput(document.getElementById("expAmount"), Math.abs(total));
+    document.getElementById("expCount").value = sorted.length;
+    document.getElementById("expIsTotal").checked = true;
+    // data da 1ª parcela (se a 1ª foi excluída, volta a partir da menor que sobrou)
+    const firstDate = addMonthsClamped(parseISO(first.date), -((first.installment_number || 1) - 1));
+    document.getElementById("expDate").value = toISODate(firstDate);
+  }
+  renderPayChips();
+  updateExpenseForm();
+  openModal("expenseModalOverlay");
+}
+
+function expAmounts() {
+  const amountInput = moneyInputToNumber(document.getElementById("expAmount"));
+  const isRefund = expIsCard() && document.getElementById("expIsRefund").checked;
+  const count = expCount();
+  const isTotal = document.getElementById("expIsTotal").checked;
+  let amounts = installmentAmounts(amountInput, count, count > 1 && isTotal);
+  if (isRefund) amounts = amounts.map((a) => -a);
+  return amounts;
+}
+
+function expIsCard() { return expPay.startsWith("card:"); }
+function expCount() {
+  if (expState.mode === "recurring") return 1;
+  if (expIsCard() && document.getElementById("expIsRefund").checked) return 1;
+  return Math.max(1, Math.min(60, Number(document.getElementById("expCount").value) || 1));
+}
+
+function updateExpenseForm() {
+  const isCard = expIsCard();
+  const isRefund = isCard && document.getElementById("expIsRefund").checked;
+  const count = expCount();
+  const isTotal = document.getElementById("expIsTotal").checked;
+
+  // estorno só faz sentido em compra nova/à vista no cartão
+  const canRefund = isCard && expState.rows.length <= 1;
+  document.getElementById("expRefundField").style.display = canRefund ? "" : "none";
+  document.getElementById("expCountField").style.display = expState.mode === "recurring" || isRefund ? "none" : "";
+  document.getElementById("expIsTotalField").style.display = count > 1 ? "" : "none";
+  document.getElementById("expAmountLabel").textContent =
+    isRefund ? "Valor do estorno (R$)"
+      : count > 1 ? (isTotal ? "Valor total (R$)" : "Valor de cada parcela (R$)") : "Valor (R$)";
+  document.getElementById("expDateLabel").textContent =
+    isCard ? "Data da compra" : count > 1 ? "1ª parcela em" : "Data";
+
+  const catSel = document.getElementById("expCategory");
+  const catName = categories.find((c) => c.id === catSel.value)?.name;
+  document.getElementById("expCategoryHint").style.display = catName === "Cartão de crédito" && !isCard ? "" : "none";
+
+  renderExpensePreview();
+}
+
+function renderExpensePreview() {
+  const box = document.getElementById("expPreview");
+  const dateStr = document.getElementById("expDate").value;
+  const amounts = expAmounts();
+  const count = amounts.length;
+  const hasAmount = amounts.some((a) => a !== 0);
+  const lines = [];
+  let warn = "";
+
+  if (expIsCard() && dateStr) {
+    const card = cardById(expPay.slice(5));
+    const date = parseISO(dateStr);
+    const firstInv = previewInvoice(card, date, 0);
+    lines.push(
+      `Entra na fatura de <b>${monthFmt.format(parseISO(firstInv.due_date)).toUpperCase()}</b> ` +
+      `(fecha ${fmtDayMonth(firstInv.closing_date)}, vence ${fmtDayMonth(firstInv.due_date)}).`
+    );
+    if (count > 1) {
+      const lastInv = previewInvoice(card, date, count - 1);
+      const differs = amounts[count - 1] !== amounts[0];
+      lines.push(
+        hasAmount
+          ? `${count}x de <b>${currency.format(amounts[0])}</b>${differs ? ` (última de ${currency.format(amounts[count - 1])})` : ""}, ` +
+            `até a fatura de ${shortMonthLabel(lastInv.due_date)}. Total ${currency.format(round2(amounts.reduce((s, a) => s + a, 0)))}.`
+          : `${count} parcelas, até a fatura de ${shortMonthLabel(lastInv.due_date)}.`
+      );
+    }
+    lines.push(`<span class="dim">Não sai do saldo agora: sai quando você pagar a fatura.</span>`);
+    const ownIds = new Set(expState.rows.map((r) => r.invoice_id));
+    if (firstInv.existing && !ownIds.has(firstInv.existing.id)) {
+      const st = invoiceInfo(firstInv.existing).status;
+      if (st === "PAGA") warn = "Essa fatura já foi paga. A compra vai deixar um valor em aberto nela.";
+      else if (st === "FECHADA" || st === "VENCIDA") warn = "Essa fatura já fechou. Confira se a data da compra está certa.";
+    }
+  } else if (count > 1 && dateStr) {
+    const date = parseISO(dateStr);
+    const last = addMonthsClamped(date, count - 1);
+    const acc = accounts.find((a) => "acc:" + a.id === expPay);
+    lines.push(
+      `${count}x${hasAmount ? ` de <b>${currency.format(amounts[0])}</b>` : ""}, de ${shortMonthLabel(dateStr)} a ${shortMonthLabel(toISODate(last))}, ` +
+      `saindo da conta ${escapeHtml(acc?.name || "—")}. Cada parcela aparece como PENDENTE no mês dela.`
+    );
+  }
+  if (expState.mode === "edit" && expState.rows.length > 1) {
+    lines.push(`<span class="dim">Ao salvar, as ${expState.rows.length} parcelas atuais são substituídas por estas.</span>`);
+  }
+
+  if (lines.length === 0 && !warn) { box.style.display = "none"; return; }
+  box.style.display = "";
+  box.innerHTML = lines.map((l) => `<div>${l}</div>`).join("") + (warn ? `<div class="warn">⚠ ${warn}</div>` : "");
+}
+
+["expCount", "expAmount", "expDate"].forEach((id) =>
+  document.getElementById(id).addEventListener("input", updateExpenseForm));
+["expIsTotal", "expIsRefund", "expCategory", "expDate"].forEach((id) =>
+  document.getElementById(id).addEventListener("change", updateExpenseForm));
+
+guardedSubmit("expenseForm", async () => {
+  const { mode, rows: oldRows } = expState;
+  const desc = document.getElementById("expDesc").value.trim();
+  const dateStr = document.getElementById("expDate").value;
+  const categoryId = document.getElementById("expCategory").value;
+  const amounts = expAmounts();
+  const count = amounts.length;
+  if (!expPay) { showToast("Escolha de onde sai o pagamento."); return; }
+  if (amounts.every((a) => a === 0)) { showToast("Informe o valor."); return; }
+  const [payType, payId] = expPay.split(":");
+
+  // despesa simples de conta (ou ocorrência de despesa fixa): só atualiza
+  const oldIsPlain = oldRows.length === 1 && !oldRows[0].card_id && !oldRows[0].installment_group;
+  if (mode === "recurring" || (oldIsPlain && payType === "acc" && count === 1)) {
+    const { error } = await mutate(supabase.from("transactions").update({
+      description: desc, amount: amounts[0], date: dateStr, account_id: payId, category_id: categoryId,
+    }).eq("id", oldRows[0].id));
+    if (error) return;
+    closeModal("expenseModalOverlay");
+    await refreshAll();
+    return;
+  }
+
+  const firstDate = parseISO(dateStr);
+  const groupId = count > 1 ? (oldRows.find((r) => r.installment_group)?.installment_group || crypto.randomUUID()) : null;
+  let newRows;
+  if (payType === "card") {
+    const card = cardById(payId);
+    if (!card) return;
+    newRows = await buildCardRows(card, { desc, amounts, firstDate, categoryId, groupId });
+    if (!newRows) return;
+    if (!(await confirmPaidInvoiceChanges(newRows, oldRows))) return;
+  } else {
+    // mantém o PAGO/PENDENTE de cada parcela que continua existindo
+    const paidByNumber = {};
+    for (const r of oldRows) if (!r.card_id) paidByNumber[r.installment_number || 1] = r.paid;
+    newRows = amounts.map((amount, i) => ({
+      description: desc,
+      amount,
+      kind: "despesa",
+      date: toISODate(addMonthsClamped(firstDate, i)),
+      account_id: payId,
+      category_id: categoryId,
+      installment_number: count > 1 ? i + 1 : null,
+      installment_total: count > 1 ? count : null,
+      installment_group: groupId,
+      paid: (i + 1) in paidByNumber ? paidByNumber[i + 1] : count === 1,
+      created_by: user.id,
+    }));
+  }
+
+  // grava as novas antes de apagar as antigas: se falhar, nada se perde
+  const { error } = await mutate(supabase.from("transactions").insert(newRows));
+  if (error) return;
+  if (oldRows.length) {
+    await mutate(supabase.from("transactions").delete().in("id", oldRows.map((r) => r.id)));
+  }
+  if (mode === "new") saveLastPay(expPay);
+  closeModal("expenseModalOverlay");
+
+  if (payType === "card") {
+    const inv = invoices.find((i) => i.id === newRows[0].invoice_id);
+    const card = cardById(payId);
+    showToast(
+      (mode === "new" ? "Compra lançada" : "Compra atualizada") +
+      (inv ? ` na fatura de ${invoiceShortLabel(inv)} do ${card.name}` : "") +
+      (count > 1 ? ` (${count}x)` : "") + "."
+    );
+  } else if (mode !== "new") {
+    showToast("Despesa atualizada.");
+  }
+  await refreshAll();
 });
 
 // ---------- ADICIONAR VALOR A LANÇAMENTO EXISTENTE ----------
@@ -933,7 +1698,7 @@ guardedSubmit("addValueForm", async () => {
   if (error) return;
   addValueTarget = null;
   closeModal("addValueModalOverlay");
-  await refreshMonth();
+  await refreshAll();
 });
 
 // dado o valor digitado, decide se ele já é o valor de cada parcela ou se
@@ -946,52 +1711,6 @@ function installmentAmounts(amountInput, count, isTotal) {
   amounts[count - 1] = Math.round((base + remainder) * 100) / 100;
   return amounts;
 }
-
-// ---------- PARCELADO ----------
-document.getElementById("openInstallment").addEventListener("click", () => {
-  document.getElementById("installmentForm").reset();
-  document.getElementById("instDate").value = toISODate(new Date());
-  document.getElementById("instAmountLabel").textContent = "Valor da parcela (R$)";
-  openModal("installmentModalOverlay");
-});
-
-document.getElementById("instIsTotal").addEventListener("change", (e) => {
-  document.getElementById("instAmountLabel").textContent = e.target.checked ? "Valor total (R$)" : "Valor da parcela (R$)";
-});
-
-guardedSubmit("installmentForm", async () => {
-  const desc = document.getElementById("instDesc").value.trim();
-  const amountInput = moneyInputToNumber(document.getElementById("instAmount"));
-  const count = Number(document.getElementById("instCount").value);
-  const isTotal = document.getElementById("instIsTotal").checked;
-  const firstDate = new Date(document.getElementById("instDate").value + "T12:00:00");
-  const accountId = document.getElementById("instAccount").value;
-  const categoryId = document.getElementById("instCategory").value;
-  const groupId = crypto.randomUUID();
-  const amounts = installmentAmounts(amountInput, count, isTotal);
-
-  const rows = [];
-  for (let i = 0; i < count; i++) {
-    const d = addMonthsClamped(firstDate, i);
-    rows.push({
-      description: desc,
-      amount: amounts[i],
-      kind: "despesa",
-      date: toISODate(d),
-      account_id: accountId,
-      category_id: categoryId,
-      installment_number: i + 1,
-      installment_total: count,
-      installment_group: groupId,
-      paid: false,
-      created_by: user.id,
-    });
-  }
-  const { error } = await mutate(supabase.from("transactions").insert(rows));
-  if (error) return;
-  closeModal("installmentModalOverlay");
-  await refreshMonth();
-});
 
 function addMonthsClamped(date, n) {
   const year = date.getFullYear();
@@ -1073,7 +1792,7 @@ guardedSubmit("recurringForm", async () => {
   await loadStaticData();
   renderRecurringGrid();
   await ensureRecurringForVisibleMonth();
-  await refreshMonth();
+  await refreshAll();
 });
 
 async function toggleRecurring(r) {
@@ -1093,25 +1812,33 @@ async function deleteRecurring(r) {
 
 // ---------- EXCLUIR LANÇAMENTO ----------
 async function deleteTransaction(t) {
-  if (t.installment_total) {
+  if (t.carryover) {
+    const ok = await confirmDialog(
+      "Desfazer a passagem do restante pra outra fatura? O valor volta a ficar em aberto na fatura original.",
+      "Desfazer restante",
+      { yesLabel: "Desfazer" }
+    );
+    if (!ok) return;
+    const { error } = await mutate(supabase.from("transactions").delete().eq("installment_group", t.installment_group));
+    if (error) return;
+    await refreshAll();
+    return;
+  }
+  if (t.installment_total && t.installment_group) {
     const choice = await confirmDialog(
       `Esta é a parcela ${t.installment_number}/${t.installment_total} de "${t.description}".`,
       "Excluir parcela",
       { yesLabel: "Só esta parcela", extraLabel: `Todas as ${t.installment_total} parcelas` }
     );
     if (!choice) return;
-    const query = choice === "extra"
-      ? supabase.from("transactions").delete().eq("installment_group", t.installment_group)
-      : supabase.from("transactions").delete().eq("id", t.id);
-    const { error } = await mutate(query);
-    if (error) return;
-    if (t.invoice_id) {
-      cardTransactions = choice === "extra"
-        ? cardTransactions.filter((x) => x.installment_group !== t.installment_group)
-        : cardTransactions.filter((x) => x.id !== t.id);
-      renderCardsGrid();
+    if (choice === "extra") {
+      const { error } = await mutate(supabase.from("transactions").delete().eq("installment_group", t.installment_group));
+      if (error) return;
+      showToast("Compra excluída.");
+      await refreshAll();
+      return;
     }
-    await refreshMonth();
+    await deleteInstallments(await fetchGroup(t.installment_group), [t.id]);
     return;
   }
   const isFixedOccurrence = !!t.recurring_id;
@@ -1129,14 +1856,17 @@ async function deleteTransaction(t) {
   }
   const { error } = await mutate(supabase.from("transactions").delete().eq("id", t.id));
   if (error) return;
-  await refreshMonth();
+  await refreshAll();
 }
 
-async function refreshMonth() {
+// recarrega tudo (cartões/faturas dependem de lançamentos de qualquer mês)
+// e redesenha os modais de fatura/parcelas que estiverem abertos
+async function refreshAll() {
+  await loadStaticData();
   await loadMonthTransactions();
-  renderTxList();
-  renderSummary();
-  renderDonut();
+  renderAll();
+  if (isModalOpen("invoiceModalOverlay")) renderInvoiceModal();
+  if (isModalOpen("groupModalOverlay")) await renderGroupModal();
 }
 
 // ---------- UTIL ----------
