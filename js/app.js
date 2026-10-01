@@ -266,29 +266,36 @@ function renderMonthLabel() {
   document.getElementById("monthLabel2").textContent = label;
 }
 
-// ---------- GRÁFICOS (despesas por categoria) ----------
+// ---------- GRÁFICOS (despesas e receitas por categoria) ----------
 const CATEGORY_PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 const OTHER_COLOR = "#6b6259";
 
-function categoryColorMap() {
-  const despesaCats = categories.filter((c) => c.kind === "despesa");
+function categoryColorMap(kind) {
+  const kindCats = categories.filter((c) => c.kind === kind);
   const map = {};
-  despesaCats.forEach((c, i) => { map[c.id] = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]; });
+  kindCats.forEach((c, i) => { map[c.id] = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]; });
   return map;
 }
 
 function renderDonut() {
-  const svg = document.getElementById("donutSvg");
-  const legend = document.getElementById("donutLegend");
-  const totalEl = document.getElementById("donutTotalValue");
-  const empty = document.getElementById("donutEmpty");
-  const layout = document.getElementById("donutLayout");
+  renderDonutChart("despesa", "donut");
+  renderDonutChart("receita", "incomeDonut");
+}
+
+// desenha um gráfico de rosca por categoria pro tipo `kind`, nos elementos
+// com ids `${prefix}Svg`, `${prefix}Legend`, `${prefix}TotalValue`…
+function renderDonutChart(kind, prefix) {
+  const svg = document.getElementById(prefix + "Svg");
+  const legend = document.getElementById(prefix + "Legend");
+  const totalEl = document.getElementById(prefix + "TotalValue");
+  const empty = document.getElementById(prefix + "Empty");
+  const layout = document.getElementById(prefix + "Layout");
   if (!svg) return;
 
-  const colorMap = categoryColorMap();
+  const colorMap = categoryColorMap(kind);
   const totals = {};
   for (const t of transactions) {
-    if (t.kind !== "despesa") continue;
+    if (t.kind !== kind) continue;
     if (t.pays_invoice_id || t.carryover) continue; // as compras já contam; o pagamento contaria duas vezes
     totals[t.category_id] = (totals[t.category_id] || 0) + Number(t.amount);
   }
