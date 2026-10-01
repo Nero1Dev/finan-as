@@ -161,7 +161,8 @@ async function ensureRecurringForVisibleMonth() {
     const recurringMonth = referenceMonthKey(m.year, m.month0);
     for (const r of recurring) {
       if (!r.active) continue;
-      if (m.cardOnly && !r.card_id) continue;
+      const kind = r.kind || "despesa";
+      if (m.cardOnly && !(kind === "despesa" && r.card_id)) continue;
       if (!(new Date(r.start_date) <= end && (!r.end_date || new Date(r.end_date) >= start))) continue;
       if (recurringSkips.some((s) => s.recurring_id === r.id && s.month === recurringMonth)) continue;
       const day = Math.min(r.day_of_month, daysInMonth(m.year, m.month0));
@@ -169,15 +170,16 @@ async function ensureRecurringForVisibleMonth() {
       const base = {
         description: r.description,
         amount: r.amount,
-        kind: "despesa",
+        kind,
         date: toISODate(date),
         category_id: r.category_id,
         recurring_id: r.id,
         recurring_month: recurringMonth,
-        paid: false,
+        // receita entra no saldo pela data; despesa de conta começa PENDENTE
+        paid: kind === "receita",
         created_by: user.id,
       };
-      if (r.card_id) {
+      if (kind === "despesa" && r.card_id) {
         if (cardTransactions.some((t) => t.recurring_id === r.id && t.recurring_month === recurringMonth)) continue;
         const card = cardById(r.card_id);
         if (!card) continue;
@@ -477,7 +479,7 @@ function txRow(t) {
     : t.recurring_month
       ? `<span class="badge">FIXA</span>`
       : "";
-  const canAddValue = t.kind === "despesa" && !t.installment_total && !t.recurring_id;
+  const canAddValue = t.kind === "despesa" && !t.installment_total && !t.recurring_month;
   const canTogglePaid = t.kind === "despesa";
 
   const paidPill = canTogglePaid
@@ -570,19 +572,23 @@ function renderRecurringGrid() {
   const grid = document.getElementById("recurringGrid");
   grid.innerHTML = "";
   if (recurring.length === 0) {
-    grid.innerHTML = `<div class="empty-state">Nenhuma despesa fixa cadastrada.</div>`;
+    grid.innerHTML = `<div class="empty-state">Nenhum lançamento fixo cadastrado. Use "+ Lançamento Fixo" pra contas do mês ou pro salário.</div>`;
     return;
   }
-  for (const r of recurring) {
+  // receitas primeiro, depois despesas
+  const sorted = recurring.slice().sort((a, b) => ((a.kind || "despesa") === (b.kind || "despesa") ? 0 : a.kind === "receita" ? -1 : 1));
+  for (const r of sorted) {
+    const isReceita = r.kind === "receita";
     const acc = accounts.find((a) => a.id === r.account_id);
     const payCard = r.card_id ? cardById(r.card_id) : null;
     const payLabel = payCard ? `Cartão ${payCard.name}` : (acc?.name || "—");
+    const color = !r.active ? "var(--bone-dim)" : isReceita ? "var(--gold)" : "var(--earth-bright)";
     const card = document.createElement("div");
     card.className = "item-card";
     card.innerHTML = `
       <div class="name">${escapeHtml(r.description)}</div>
-      <div class="type mono">Todo dia ${r.day_of_month} · ${escapeHtml(payLabel)}</div>
-      <div class="balance ${r.active ? "positive" : ""}" style="color:${r.active ? "var(--gold)" : "var(--bone-dim)"}">${currency.format(r.amount)}</div>
+      <div class="type mono">${isReceita ? "RECEITA" : "DESPESA"} · Todo dia ${r.day_of_month} · ${escapeHtml(payLabel)}${r.active ? "" : " · PAUSADO"}</div>
+      <div class="balance" style="color:${color}">${isReceita ? "+" : "-"}${currency.format(r.amount)}</div>
       <div class="card-actions">
         <button class="btn btn-outline" data-edit>Editar</button>
         <button class="btn btn-outline" data-toggle>${r.active ? "Pausar" : "Ativar"}</button>
@@ -1847,25 +1853,51 @@ async function archiveAccount(a) {
   renderAll();
 }
 
-// ---------- DESPESAS FIXAS ----------
+// ---------- LANÇAMENTOS FIXOS (receita ou despesa) ----------
+let recKind = "despesa";
+
+function setRecKind(kind) {
+  recKind = kind;
+  document.querySelectorAll("#recKindToggle [data-kind]").forEach((b) => b.classList.toggle("active", b.dataset.kind === kind));
+  const isReceita = kind === "receita";
+  document.getElementById("recPayLabel").textContent = isReceita ? "Receber em" : "Pagar com";
+  document.getElementById("recDesc").placeholder = isReceita ? "Ex: Salário, Aluguel recebido" : "Ex: Aluguel, Internet";
+  // receita não cai em cartão de crédito
+  const sel = document.getElementById("recPay");
+  const group = sel.querySelector('optgroup[label="Cartões de crédito"]');
+  if (group) group.hidden = isReceita;
+  sel.querySelectorAll('option[value^="card:"]').forEach((o) => { o.disabled = isReceita; });
+  if (isReceita && sel.value.startsWith("card:")) sel.value = sel.querySelector('option[value^="acc:"]')?.value || "";
+  const cat = document.getElementById("recCategory").value;
+  fillCategorySelect("recCategory", kind);
+  if (cat) document.getElementById("recCategory").value = cat;
+  if (!document.getElementById("recCategory").value) document.getElementById("recCategory").selectedIndex = 0;
+  updateRecPayHint();
+}
+document.querySelectorAll("#recKindToggle [data-kind]").forEach((b) =>
+  b.addEventListener("click", () => setRecKind(b.dataset.kind)));
+
 document.getElementById("openRecurring").addEventListener("click", () => {
   document.getElementById("recurringForm").reset();
   document.getElementById("recurringId").value = "";
-  document.getElementById("recurringModalTitle").textContent = "Despesa Fixa Mensal";
+  document.getElementById("recurringModalTitle").textContent = "Lançamento Fixo Mensal";
   document.getElementById("recDay").value = 5;
-  updateRecPayHint();
+  document.getElementById("recKindToggle").style.display = "";
+  setRecKind("despesa");
   openModal("recurringModalOverlay");
 });
 
 function updateRecPayHint() {
   document.getElementById("recPayHint").style.display =
-    document.getElementById("recPay").value.startsWith("card:") ? "" : "none";
+    recKind === "despesa" && document.getElementById("recPay").value.startsWith("card:") ? "" : "none";
 }
 document.getElementById("recPay").addEventListener("change", updateRecPayHint);
 
 function editRecurringModal(r) {
   document.getElementById("recurringId").value = r.id;
-  document.getElementById("recurringModalTitle").textContent = "Editar Despesa Fixa";
+  document.getElementById("recurringModalTitle").textContent = r.kind === "receita" ? "Editar Receita Fixa" : "Editar Despesa Fixa";
+  // trocar receita <-> despesa de um fixo existente bagunçaria o histórico
+  document.getElementById("recKindToggle").style.display = "none";
   document.getElementById("recDesc").value = r.description;
   setMoneyInput(document.getElementById("recAmount"), r.amount);
   document.getElementById("recDay").value = r.day_of_month;
@@ -1877,6 +1909,7 @@ function editRecurringModal(r) {
     sel.insertAdjacentHTML("beforeend", `<option value="${pay}">${escapeHtml(c?.name || "Cartão")} (arquivado)</option>`);
   }
   sel.value = pay;
+  setRecKind(r.kind || "despesa");
   document.getElementById("recCategory").value = r.category_id || "";
   updateRecPayHint();
   openModal("recurringModalOverlay");
@@ -1885,7 +1918,9 @@ function editRecurringModal(r) {
 guardedSubmit("recurringForm", async () => {
   const id = document.getElementById("recurringId").value;
   const [payType, payId] = document.getElementById("recPay").value.split(":");
+  if (recKind === "receita" && payType !== "acc") { showToast("Receita fixa precisa cair numa conta."); return; }
   const row = {
+    kind: recKind,
     description: document.getElementById("recDesc").value.trim(),
     amount: moneyInputToNumber(document.getElementById("recAmount")),
     day_of_month: Number(document.getElementById("recDay").value),
@@ -1899,14 +1934,18 @@ guardedSubmit("recurringForm", async () => {
   if (error) return;
   if (id) {
     // recria as ocorrências deste mês em diante com os dados novos (valor,
-    // conta/cartão…). Só fica a despesa de conta que já foi marcada PAGA.
+    // conta/cartão…). Fica o que já aconteceu: despesa de conta marcada PAGA
+    // e receita que já caiu (data até hoje).
     const now = new Date();
+    const todayISO = toISODate(now);
     const { data: occ } = await supabase
       .from("transactions")
-      .select("id,card_id,paid")
+      .select("id,kind,card_id,paid,date")
       .eq("recurring_id", id)
       .gte("recurring_month", referenceMonthKey(now.getFullYear(), now.getMonth()));
-    const ids = (occ || []).filter((t) => t.card_id || !t.paid).map((t) => t.id);
+    const ids = (occ || [])
+      .filter((t) => (t.kind === "receita" ? t.date > todayISO : t.card_id || !t.paid))
+      .map((t) => t.id);
     if (ids.length) await mutate(supabase.from("transactions").delete().in("id", ids));
   }
   closeModal("recurringModalOverlay");
@@ -1926,9 +1965,9 @@ async function deleteRecurring(r) {
   const now = new Date();
   const currentKey = referenceMonthKey(now.getFullYear(), now.getMonth());
   const choice = await confirmDialog(
-    `Excluir a despesa fixa "${r.description}"? Os lançamentos dos meses seguintes são apagados. ` +
+    `Excluir o lançamento fixo "${r.description}"? Os lançamentos dos meses seguintes são apagados. ` +
     `Escolha se os deste mês pra trás ficam no histórico ou se apaga tudo.`,
-    "Excluir despesa fixa",
+    "Excluir lançamento fixo",
     { yesLabel: "Manter até este mês", extraLabel: "Apagar todos os meses" }
   );
   if (!choice) return;
@@ -1939,7 +1978,7 @@ async function deleteRecurring(r) {
   if (txError) return;
   const { error } = await mutate(supabase.from("recurring_expenses").delete().eq("id", r.id));
   if (error) return;
-  showToast(choice === "extra" ? "Despesa fixa e todos os lançamentos apagados." : "Despesa fixa excluída. Histórico até este mês mantido.");
+  showToast(choice === "extra" ? "Lançamento fixo e todos os meses apagados." : "Lançamento fixo excluído. Histórico até este mês mantido.");
   await refreshAll();
 }
 

@@ -38,7 +38,7 @@
     <button class="tab" data-tab="graficos">Gráficos</button>
     <button class="tab" data-tab="contas">Contas</button>
     <button class="tab" data-tab="cartoes">Cartões</button>
-    <button class="tab" data-tab="fixas">Despesas Fixas</button>
+    <button class="tab" data-tab="fixas">Lançamentos Fixos</button>
   </div>
 
   <!-- ===== TAB: DASHBOARD ===== -->
@@ -113,7 +113,7 @@
     <div class="action-bar">
       <div></div>
       <div class="actions">
-        <button class="btn btn-primary" id="openRecurring">+ Despesa Fixa</button>
+        <button class="btn btn-primary" id="openRecurring">+ Lançamento Fixo</button>
       </div>
     </div>
     <div class="item-grid" id="recurringGrid"></div>
@@ -329,13 +329,17 @@
   </div>
 </div>
 
-<!-- ===== MODAL: DESPESA FIXA ===== -->
+<!-- ===== MODAL: LANÇAMENTO FIXO (receita ou despesa) ===== -->
 <div class="modal-overlay" id="recurringModalOverlay">
   <div class="modal">
     <button class="modal-close" data-close>&times;</button>
-    <h2 id="recurringModalTitle">Despesa Fixa Mensal</h2>
+    <h2 id="recurringModalTitle">Lançamento Fixo Mensal</h2>
     <form id="recurringForm">
       <input type="hidden" id="recurringId" value="">
+      <div class="kind-toggle" id="recKindToggle">
+        <button type="button" data-kind="despesa" class="active">Despesa</button>
+        <button type="button" data-kind="receita">Receita</button>
+      </div>
       <div class="field">
         <label>Descrição</label>
         <input type="text" id="recDesc" required placeholder="Ex: Aluguel, Internet">
@@ -352,7 +356,7 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Pagar com</label>
+          <label id="recPayLabel">Pagar com</label>
           <select id="recPay" required></select>
         </div>
         <div class="field">
