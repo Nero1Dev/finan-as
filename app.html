@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=12">
+<link rel="stylesheet" href="css/style.css?v=13">
 </head>
 <body data-tab="dashboard">
 
@@ -303,9 +303,9 @@
       <div class="page-head">
         <div>
           <h1>Categorias</h1>
-          <div class="page-sub">Compartilhadas entre os logins do app</div>
+          <div class="page-sub">Só suas: criar, editar ou excluir não muda nada pra outras pessoas</div>
         </div>
-        <div class="actions"><button class="btn btn-primary" id="openCategory"><svg class="i"><use href="#i-plus"/></svg>Nova categoria</button></div>
+        <div class="actions"><button class="btn btn-outline" id="restoreCategories" style="display:none"><svg class="i"><use href="#i-undo"/></svg>Restaurar padrões</button><button class="btn btn-primary" id="openCategory"><svg class="i"><use href="#i-plus"/></svg>Nova categoria</button></div>
       </div>
       <div class="report-grid">
         <section class="panel">
@@ -683,8 +683,8 @@
   </div>
 </div>
 
-<script src="js/theme.js?v=12"></script>
-<script type="module" src="js/app.js?v=12"></script>
+<script src="js/theme.js?v=13"></script>
+<script type="module" src="js/app.js?v=13"></script>
 <script src="js/register-sw.js"></script>
 </body>
 </html>

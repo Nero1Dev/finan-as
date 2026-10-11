@@ -167,6 +167,12 @@ async function loadStaticData() {
   ]);
   accounts = accRes.data || [];
   categories = catRes.data || [];
+  // usuário novo (sem nenhuma categoria): ganha as padrão no primeiro acesso
+  if (categories.length === 0 && !defaultsSeeded) {
+    defaultsSeeded = true;
+    const { data } = await mutate(supabase.from("categories").insert(missingDefaultCategories()).select());
+    categories = (data || []).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }
   recurring = recRes.data || [];
   recurringSkips = skipRes.data || [];
   allCards = cardRes.data || [];
@@ -903,8 +909,26 @@ window.addEventListener("resize", () => {
 document.getElementById("printReport").addEventListener("click", () => window.print());
 
 // ---------- CATEGORIAS (criar, editar, excluir) ----------
-// a lista é compartilhada entre os logins do app (é só referência, sem valores).
+// cada login tem as próprias categorias (mudar ou excluir não afeta ninguém).
 // "Cartão de crédito" fica travada: o pagamento de fatura acha ela pelo nome.
+const DEFAULT_CATEGORIES = {
+  despesa: ["Moradia", "Alimentação", "Transporte", "Contas da casa", "Saúde", "Lazer", "Educação", "Assinaturas", "Cartão de crédito", "Outras despesas"],
+  receita: ["Salário", "Freelance / Extra", "Investimentos", "Outras receitas"],
+};
+let defaultsSeeded = false;
+
+// categorias padrão que o usuário ainda não tem (comparando pelo nome)
+function missingDefaultCategories() {
+  const rows = [];
+  for (const kind of ["despesa", "receita"]) {
+    DEFAULT_CATEGORIES[kind].forEach((name, i) => {
+      if (!categories.some((c) => c.kind === kind && normalizeText(c.name) === normalizeText(name))) {
+        rows.push({ name, kind, color: CATEGORY_PALETTE[i % CATEGORY_PALETTE.length] });
+      }
+    });
+  }
+  return rows;
+}
 const NEW_CATEGORY = "__new";
 const PROTECTED_CATEGORY = "Cartão de crédito";
 let categoryFormKind = "despesa";
@@ -922,6 +946,10 @@ function renderCategoriesPage() {
     if (t.pays_invoice_id || t.carryover || !t.category_id) continue;
     monthTotals[t.category_id] = (monthTotals[t.category_id] || 0) + Number(t.amount);
   }
+  const missing = missingDefaultCategories().length;
+  const restore = document.getElementById("restoreCategories");
+  restore.style.display = missing ? "" : "none";
+  restore.title = `Adiciona de volta ${missing} categoria(s) padrão que você não tem`;
   for (const kind of ["despesa", "receita"]) {
     const suffix = kind === "despesa" ? "Despesa" : "Receita";
     const list = categories.filter((c) => c.kind === kind);
@@ -1006,6 +1034,21 @@ function openCategoryModal({ category = null, kind = "despesa", target = null } 
   setTimeout(() => document.getElementById("categoryName").focus(), 50);
 }
 document.getElementById("openCategory").addEventListener("click", () => openCategoryModal());
+document.getElementById("restoreCategories").addEventListener("click", async () => {
+  const rows = missingDefaultCategories();
+  if (!rows.length) return;
+  const ok = await confirmDialog(
+    `Adicionar de volta ${rows.length} categoria(s) padrão: ${rows.map((r) => r.name).join(", ")}?`,
+    "Restaurar categorias padrão",
+    { yesLabel: "Adicionar" }
+  );
+  if (!ok) return;
+  const { error } = await mutate(supabase.from("categories").insert(rows));
+  if (error) return;
+  showToast(`${rows.length} categoria(s) padrão adicionada(s).`);
+  await loadStaticData();
+  renderAll();
+});
 
 // "+ Nova categoria…" dentro dos formulários de lançamento
 for (const id of ["txCategory", "expCategory", "recCategory"]) {
@@ -1054,7 +1097,7 @@ async function deleteCategory(c) {
     ? `${count} ${count === 1 ? "lançamento seu fica" : "lançamentos seus ficam"} sem categoria.`
     : "Nenhum lançamento seu usa ela.";
   const ok = await confirmDialog(
-    `Excluir a categoria "${c.name}"? ${usage} Ela some também pra quem mais usa o app.`,
+    `Excluir a categoria "${c.name}"? ${usage}`,
     "Excluir categoria",
     { yesLabel: "Excluir" }
   );

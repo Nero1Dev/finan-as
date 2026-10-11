@@ -17,9 +17,10 @@ create table if not exists accounts (
   created_at timestamptz not null default now()
 );
 
--- Categorias
+-- Categorias (cada login tem as suas; as padrão são criadas pelo app no 1º acesso)
 create table if not exists categories (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name text not null,
   kind text not null check (kind in ('receita','despesa')),
   color text default '#7C3220',
@@ -118,8 +119,7 @@ create table if not exists recurring_skips (
 -- ============================================================
 -- RLS — só usuários autenticados (você + a segunda pessoa) acessam.
 -- Cada login só vê e edita suas PRÓPRIAS contas, despesas fixas e
--- lançamentos (financeiro individual, não compartilhado). As categorias
--- continuam sendo uma lista de referência única, usada pelos dois.
+-- lançamentos e categorias (financeiro individual, não compartilhado).
 -- IMPORTANTE: depois de criar as 2 contas, vá em Authentication > Providers
 -- e desative "Allow new users to sign up" para ninguém mais se cadastrar.
 -- ============================================================
@@ -132,8 +132,10 @@ alter table recurring_expenses enable row level security;
 alter table transactions enable row level security;
 alter table recurring_skips enable row level security;
 
-create policy "auth full access" on categories
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create unique index if not exists categories_user_kind_name on categories (user_id, kind, lower(name));
+
+create policy "dono ve e edita suas categorias" on categories
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "dono ve e edita suas contas" on accounts
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -153,7 +155,6 @@ create policy "dono ve e edita seus lancamentos" on transactions
 create policy "dono ve e edita seus meses pulados" on recurring_skips
   for all using (auth.uid() = created_by) with check (auth.uid() = created_by);
 
--- Categorias padrão
 -- Perfis (associa um nome de usuário único a cada login, permite
 -- entrar tanto com e-mail quanto com nome de usuário)
 create table if not exists profiles (
@@ -174,16 +175,4 @@ create policy "usuario cria proprio perfil" on profiles
 create policy "usuario atualiza proprio perfil" on profiles
   for update using (auth.uid() = id);
 
-insert into categories (name, kind, color) values
-  ('Salário', 'receita', '#C99A44'),
-  ('Freelance / Extra', 'receita', '#C99A44'),
-  ('Outras receitas', 'receita', '#C99A44'),
-  ('Moradia', 'despesa', '#7C3220'),
-  ('Alimentação', 'despesa', '#7C3220'),
-  ('Transporte', 'despesa', '#7C3220'),
-  ('Saúde', 'despesa', '#7C3220'),
-  ('Lazer', 'despesa', '#7C3220'),
-  ('Assinaturas', 'despesa', '#7C3220'),
-  ('Cartão de crédito', 'despesa', '#7C3220'),
-  ('Outras despesas', 'despesa', '#7C3220')
-on conflict do nothing;
+-- categorias padrão: criadas pelo app pra cada usuário no primeiro acesso (DEFAULT_CATEGORIES em js/app.js)
