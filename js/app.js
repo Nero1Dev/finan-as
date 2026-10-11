@@ -114,6 +114,20 @@ viewDate.setDate(1);
 init();
 
 async function init() {
+  try {
+    await boot();
+  } catch (err) {
+    // nunca deixa a tela presa no "carregando": mostra o erro e um jeito de sair
+    console.error(err);
+    const veil = document.getElementById("loadingVeil");
+    veil.innerHTML = `
+      <span class="brand-mark">${icon("alert")}</span>
+      <span class="mono">NÃO FOI POSSÍVEL CARREGAR</span>
+      <button class="btn btn-primary" onclick="location.reload()">Tentar de novo</button>`;
+  }
+}
+
+async function boot() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { window.location.href = "/"; return; }
   user = session.user;

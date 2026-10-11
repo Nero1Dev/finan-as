@@ -1,4 +1,4 @@
-const CACHE_NAME = "financas-cache-v9";
+const CACHE_NAME = "financas-cache-v10";
 
 const APP_SHELL = [
   "/",
@@ -27,7 +27,9 @@ const APP_SHELL = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
-      Promise.allSettled(APP_SHELL.map((url) => cache.add(url)))
+      // cache: "reload" ignora o cache HTTP do GitHub Pages (max-age=600),
+      // senão o precache podia guardar a versão anterior dos arquivos
+      Promise.allSettled(APP_SHELL.map((url) => cache.add(new Request(url, { cache: "reload" }))))
     )
   );
   self.skipWaiting();
@@ -55,29 +57,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match("/404.html")))
-    );
-    return;
-  }
-
+  // rede primeiro pra tudo (páginas, JS, CSS): servir um JS antigo do cache
+  // junto com um HTML novo quebra o app. O cache fica só pra uso offline.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
+    fetch(request, { cache: "no-cache" })
+      .then((response) => {
+        if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+        }
+        return response;
+      })
+      .catch(() =>
+        caches.match(request, { ignoreSearch: true }).then((cached) =>
+          cached || (request.mode === "navigate" ? caches.match("/404.html") : Response.error())
+        )
+      )
   );
 });
