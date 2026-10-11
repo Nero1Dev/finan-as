@@ -27,6 +27,7 @@ const CATEGORY_ICONS = [
   [/educa|curso|escola|faculdade|livro/, "book"],
   [/viage|turismo|hotel|passage/, "plane"],
   [/roupa|vestu|moda|calcado/, "shirt"],
+  [/pet|cachorro|gato|veterin|racao/, "paw"],
   [/presente|doac/, "gift"],
   [/eletron|tecnolog|notebook|computador/, "laptop"],
   [/imposto|taxa|juros|tarifa|multa/, "percent"],
@@ -274,6 +275,7 @@ function renderAll() {
   renderAccountsGrid();
   renderCardsGrid();
   renderRecurringGrid();
+  renderCategoriesPage();
   fillSelects();
 }
 
@@ -424,10 +426,16 @@ function renderMonthLabel() {
 const CATEGORY_PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 const OTHER_COLOR = "#8a8597";
 
+// cor de cada categoria: as criadas aqui guardam a própria cor; as antigas
+// (com a cor padrão do tema velho) recebem a paleta pela ordem do nome
+const LEGACY_CATEGORY_COLORS = new Set(["#7c3220", "#c99a44"]);
+function hasOwnColor(c) { return !!c.color && !LEGACY_CATEGORY_COLORS.has(c.color.toLowerCase()); }
 function categoryColorMap(kind) {
-  const kindCats = categories.filter((c) => c.kind === kind);
   const map = {};
-  kindCats.forEach((c, i) => { map[c.id] = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]; });
+  categories
+    .filter((c) => c.kind === kind && !hasOwnColor(c))
+    .forEach((c, i) => { map[c.id] = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]; });
+  for (const c of categories) if (c.kind === kind && hasOwnColor(c)) map[c.id] = c.color;
   return map;
 }
 
@@ -893,6 +901,169 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => { if (reportData) drawTrendChart(reportData.months); }, 150);
 });
 document.getElementById("printReport").addEventListener("click", () => window.print());
+
+// ---------- CATEGORIAS (criar, editar, excluir) ----------
+// a lista é compartilhada entre os logins do app (é só referência, sem valores).
+// "Cartão de crédito" fica travada: o pagamento de fatura acha ela pelo nome.
+const NEW_CATEGORY = "__new";
+const PROTECTED_CATEGORY = "Cartão de crédito";
+let categoryFormKind = "despesa";
+let categoryFormColor = CATEGORY_PALETTE[0];
+let categoryTarget = null; // select que pediu "+ Nova categoria…" (pra já deixar a nova escolhida)
+
+function selectedCategory(id) {
+  const v = document.getElementById(id).value;
+  return v && v !== NEW_CATEGORY ? v : null;
+}
+
+function renderCategoriesPage() {
+  const monthTotals = {};
+  for (const t of transactions) {
+    if (t.pays_invoice_id || t.carryover || !t.category_id) continue;
+    monthTotals[t.category_id] = (monthTotals[t.category_id] || 0) + Number(t.amount);
+  }
+  for (const kind of ["despesa", "receita"]) {
+    const suffix = kind === "despesa" ? "Despesa" : "Receita";
+    const list = categories.filter((c) => c.kind === kind);
+    const colors = categoryColorMap(kind);
+    document.getElementById("catCount" + suffix).textContent = `${list.length} ${list.length === 1 ? "categoria" : "categorias"}`;
+    const el = document.getElementById("catList" + suffix);
+    if (!list.length) {
+      el.innerHTML = `<div class="empty-state small">Nenhuma categoria de ${kind} ainda.</div>`;
+      continue;
+    }
+    el.innerHTML = "";
+    for (const c of list) {
+      const locked = c.name === PROTECTED_CATEGORY;
+      const used = monthTotals[c.id] || 0;
+      const row = document.createElement("div");
+      row.className = "cat-item";
+      row.innerHTML = `
+        <span class="cat-chip" style="background:${colors[c.id]}">${icon(categoryIcon(c.name, kind), "sm")}</span>
+        <div class="cat-item-main">
+          <div class="cat-item-name">${escapeHtml(c.name)}</div>
+          <div class="cat-item-meta">${locked ? "usada nas faturas · não pode ser alterada" : used ? `${currency.format(used)} em ${MONTHS_LONG[viewDate.getMonth()].toLowerCase()}` : "sem lançamentos neste mês"}</div>
+        </div>
+        <div class="row-actions">${locked ? "" : `<button title="Editar" aria-label="Editar ${escapeHtml(c.name)}" data-edit>${icon("edit")}</button><button title="Excluir" aria-label="Excluir ${escapeHtml(c.name)}" data-del>${icon("trash")}</button>`}</div>`;
+      if (!locked) {
+        row.querySelector("[data-edit]").addEventListener("click", () => openCategoryModal({ category: c }));
+        row.querySelector("[data-del]").addEventListener("click", () => deleteCategory(c));
+      }
+      el.appendChild(row);
+    }
+  }
+}
+
+function setCategoryFormKind(kind) {
+  categoryFormKind = kind;
+  document.querySelectorAll("#categoryKindToggle [data-kind]").forEach((b) => b.classList.toggle("active", b.dataset.kind === kind));
+  updateCategoryPreview();
+}
+document.querySelectorAll("#categoryKindToggle [data-kind]").forEach((b) =>
+  b.addEventListener("click", () => setCategoryFormKind(b.dataset.kind)));
+
+function renderCategorySwatches() {
+  const el = document.getElementById("categoryColors");
+  el.innerHTML = CATEGORY_PALETTE.map((c) => `
+    <button type="button" class="swatch${c === categoryFormColor ? " active" : ""}" role="radio" aria-checked="${c === categoryFormColor}"
+      aria-label="Cor ${c}" data-color="${c}" style="background:${c}">${c === categoryFormColor ? icon("check", "sm") : ""}</button>`).join("");
+  el.querySelectorAll("[data-color]").forEach((b) => b.addEventListener("click", () => {
+    categoryFormColor = b.dataset.color;
+    renderCategorySwatches();
+    updateCategoryPreview();
+  }));
+}
+
+function updateCategoryPreview() {
+  const name = document.getElementById("categoryName").value.trim();
+  const chip = document.getElementById("categoryPreviewIcon");
+  chip.style.background = categoryFormColor;
+  chip.innerHTML = icon(categoryIcon(name, categoryFormKind), "sm");
+  document.getElementById("categoryPreviewName").textContent = name || "Prévia";
+}
+document.getElementById("categoryName").addEventListener("input", updateCategoryPreview);
+
+// cor sugerida pra uma categoria nova: a primeira da paleta que ainda não está em uso
+function suggestedCategoryColor(kind) {
+  const used = new Set(Object.values(categoryColorMap(kind)).map((c) => c.toLowerCase()));
+  return CATEGORY_PALETTE.find((c) => !used.has(c.toLowerCase())) || CATEGORY_PALETTE[categories.filter((c) => c.kind === kind).length % CATEGORY_PALETTE.length];
+}
+
+function openCategoryModal({ category = null, kind = "despesa", target = null } = {}) {
+  categoryTarget = target;
+  document.getElementById("categoryForm").reset();
+  document.getElementById("categoryId").value = category?.id || "";
+  document.getElementById("categoryModalTitle").textContent = category ? "Editar categoria" : "Nova categoria";
+  document.getElementById("categorySubmit").textContent = category ? "Salvar alterações" : "Criar categoria";
+  // trocar o tipo de uma categoria em uso bagunçaria os lançamentos dela
+  document.getElementById("categoryKindToggle").style.display = category || target ? "none" : "";
+  document.getElementById("categoryName").value = category?.name || "";
+  const k = category?.kind || kind;
+  categoryFormColor = category ? categoryColorMap(k)[category.id] : suggestedCategoryColor(k);
+  setCategoryFormKind(k);
+  renderCategorySwatches();
+  openModal("categoryModalOverlay");
+  setTimeout(() => document.getElementById("categoryName").focus(), 50);
+}
+document.getElementById("openCategory").addEventListener("click", () => openCategoryModal());
+
+// "+ Nova categoria…" dentro dos formulários de lançamento
+for (const id of ["txCategory", "expCategory", "recCategory"]) {
+  document.getElementById(id).addEventListener("change", (e) => {
+    const sel = e.target;
+    if (sel.value !== NEW_CATEGORY) return;
+    sel.selectedIndex = 0;
+    openCategoryModal({ kind: sel.dataset.kind || "despesa", target: id });
+  });
+}
+
+guardedSubmit("categoryForm", async () => {
+  const id = document.getElementById("categoryId").value;
+  const name = document.getElementById("categoryName").value.trim().replace(/\s+/g, " ");
+  if (!name) { showToast("Dê um nome pra categoria."); return; }
+  if (name === PROTECTED_CATEGORY) { showToast(`"${PROTECTED_CATEGORY}" é reservada pras faturas.`); return; }
+  const kind = id ? categories.find((c) => c.id === id)?.kind : categoryFormKind;
+  const dup = categories.find((c) => c.kind === kind && c.id !== id && normalizeText(c.name) === normalizeText(name));
+  if (dup) { showToast(`Já existe a categoria "${dup.name}".`); return; }
+
+  let savedId = id;
+  if (id) {
+    const { error } = await mutate(supabase.from("categories").update({ name, color: categoryFormColor }).eq("id", id));
+    if (error) return;
+  } else {
+    const { data, error } = await mutate(supabase.from("categories").insert({ name, kind, color: categoryFormColor }).select().single());
+    if (error) return;
+    savedId = data?.id;
+  }
+  closeModal("categoryModalOverlay");
+  showToast(id ? "Categoria atualizada." : `Categoria "${name}" criada.`);
+  await loadStaticData();
+  renderAll();
+  if (categoryTarget && savedId) {
+    const sel = document.getElementById(categoryTarget);
+    fillCategorySelect(categoryTarget, kind);
+    sel.value = savedId;
+    sel.dispatchEvent(new Event("change"));
+  }
+  categoryTarget = null;
+});
+
+async function deleteCategory(c) {
+  const { count } = await supabase.from("transactions").select("id", { count: "exact", head: true }).eq("category_id", c.id);
+  const usage = count
+    ? `${count} ${count === 1 ? "lançamento seu fica" : "lançamentos seus ficam"} sem categoria.`
+    : "Nenhum lançamento seu usa ela.";
+  const ok = await confirmDialog(
+    `Excluir a categoria "${c.name}"? ${usage} Ela some também pra quem mais usa o app.`,
+    "Excluir categoria",
+    { yesLabel: "Excluir" }
+  );
+  if (!ok) return;
+  const { error } = await mutate(supabase.from("categories").delete().eq("id", c.id));
+  if (error) return;
+  showToast("Categoria excluída.");
+  await refreshAll();
+}
 
 // ---------- PRÓXIMOS VENCIMENTOS ----------
 // despesas de conta pendentes (atrasadas ou nos próximos 7 dias), faturas em
@@ -1994,17 +2165,19 @@ function fillCategorySelect(id, kind) {
     .filter((c) => c.kind === kind)
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
     .join("");
-  document.getElementById(id).innerHTML = opts;
+  const sel = document.getElementById(id);
+  sel.innerHTML = opts + `<option value="${NEW_CATEGORY}">+ Nova categoria…</option>`;
+  sel.dataset.kind = kind;
 }
 
 // ---------- NAVEGAÇÃO (menu lateral, barra inferior e "Mais") ----------
-const TABS = ["dashboard", "graficos", "contas", "cartoes", "fixas"];
+const TABS = ["dashboard", "graficos", "contas", "cartoes", "fixas", "categorias"];
 
 function showTab(tab) {
   document.body.dataset.tab = tab;
   document.querySelectorAll(".nav-item[data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   // no celular, Contas e Fixos ficam dentro do "Mais"
-  document.getElementById("openMore").classList.toggle("active", tab === "contas" || tab === "fixas");
+  document.getElementById("openMore").classList.toggle("active", ["contas", "fixas", "categorias"].includes(tab));
   TABS.forEach((t) => {
     document.getElementById(`tab-${t}`).style.display = t === tab ? "" : "none";
   });
@@ -2188,7 +2361,7 @@ guardedSubmit("txForm", async () => {
     kind,
     date: document.getElementById("txDate").value,
     account_id: document.getElementById("txAccount").value,
-    category_id: document.getElementById("txCategory").value,
+    category_id: selectedCategory("txCategory"),
   };
   const { error } = id
     ? await mutate(supabase.from("transactions").update(row).eq("id", id))
@@ -2387,7 +2560,7 @@ guardedSubmit("expenseForm", async () => {
   const { mode, rows: oldRows } = expState;
   const desc = document.getElementById("expDesc").value.trim();
   const dateStr = document.getElementById("expDate").value;
-  const categoryId = document.getElementById("expCategory").value;
+  const categoryId = selectedCategory("expCategory");
   const amounts = expAmounts();
   const count = amounts.length;
   if (!expPay) { showToast("Escolha de onde sai o pagamento."); return; }
@@ -2618,7 +2791,7 @@ guardedSubmit("recurringForm", async () => {
     day_of_month: Number(document.getElementById("recDay").value),
     account_id: payType === "acc" ? payId : null,
     card_id: payType === "card" ? payId : null,
-    category_id: document.getElementById("recCategory").value,
+    category_id: selectedCategory("recCategory"),
   };
   const { error } = id
     ? await mutate(supabase.from("recurring_expenses").update(row).eq("id", id))
