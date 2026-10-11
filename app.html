@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body data-tab="dashboard">
 
@@ -167,7 +167,7 @@
           </div>
           <div class="cat-stack" id="catStack"></div>
           <div class="cat-rows" id="catRows"></div>
-          <button class="link-btn" data-goto="graficos">Ver relatório completo →</button>
+          <button class="link-btn" data-goto="graficos">Ver relatório do mês →</button>
         </section>
       </div>
 
@@ -187,34 +187,82 @@
 
     <!-- ===== RELATÓRIOS ===== -->
     <section id="tab-graficos" class="stack" style="display:none">
-      <div class="page-head"><h1>Relatórios</h1></div>
-      <section class="panel">
-        <div class="panel-head"><h2>Despesas por categoria</h2></div>
-        <div id="donutEmpty" class="empty-state" style="display:none;">Nenhuma despesa neste mês ainda.</div>
-        <div class="donut-layout" id="donutLayout">
-          <div class="donut-wrap">
-            <svg id="donutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
-            <div class="donut-center">
-              <div class="donut-center-label mono">TOTAL</div>
-              <div class="donut-center-value" id="donutTotalValue"></div>
-            </div>
-          </div>
-          <div class="donut-legend" id="donutLegend"></div>
+      <div class="page-head">
+        <div>
+          <h1>Relatório financeiro</h1>
+          <div class="page-sub" id="reportPeriod"></div>
         </div>
+        <div class="actions">
+          <button class="btn btn-outline" id="printReport"><svg class="i"><use href="#i-receipt"/></svg>Imprimir / PDF</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid" id="reportKpis"></div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Resumo do mês</h2>
+        </div>
+        <ul class="insights" id="reportInsights"></ul>
       </section>
+
       <section class="panel">
-        <div class="panel-head"><h2>Receitas por categoria</h2></div>
-        <div id="incomeDonutEmpty" class="empty-state" style="display:none;">Nenhuma receita neste mês ainda.</div>
-        <div class="donut-layout" id="incomeDonutLayout">
-          <div class="donut-wrap">
-            <svg id="incomeDonutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
-            <div class="donut-center">
-              <div class="donut-center-label mono">TOTAL</div>
-              <div class="donut-center-value" id="incomeDonutTotalValue"></div>
-            </div>
+        <div class="panel-head">
+          <h2>Receitas e despesas · últimos 6 meses</h2>
+          <div class="chart-legend">
+            <span><i style="background:#199E70"></i>Receitas</span>
+            <span><i style="background:#E0533D"></i>Despesas</span>
           </div>
-          <div class="donut-legend" id="incomeDonutLegend"></div>
         </div>
+        <div class="trend-chart" id="trendChart"></div>
+        <details class="table-view">
+          <summary>Ver como tabela</summary>
+          <div class="table-scroll"><table id="trendTable"></table></div>
+        </details>
+      </section>
+
+      <div class="report-grid">
+        <section class="panel">
+          <div class="panel-head"><h2>Despesas por categoria</h2><span class="hint">vs mês anterior</span></div>
+          <div id="donutEmpty" class="empty-state" style="display:none;">Nenhuma despesa neste mês ainda.</div>
+          <div class="donut-layout" id="donutLayout">
+            <div class="donut-wrap">
+              <svg id="donutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
+              <div class="donut-center">
+                <div class="donut-center-label mono">TOTAL</div>
+                <div class="donut-center-value" id="donutTotalValue"></div>
+              </div>
+            </div>
+            <div class="donut-legend" id="donutLegend"></div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Receitas por categoria</h2><span class="hint">vs mês anterior</span></div>
+          <div id="incomeDonutEmpty" class="empty-state" style="display:none;">Nenhuma receita neste mês ainda.</div>
+          <div class="donut-layout" id="incomeDonutLayout">
+            <div class="donut-wrap">
+              <svg id="incomeDonutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
+              <div class="donut-center">
+                <div class="donut-center-label mono">TOTAL</div>
+                <div class="donut-center-value" id="incomeDonutTotalValue"></div>
+              </div>
+            </div>
+            <div class="donut-legend" id="incomeDonutLegend"></div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Por onde o dinheiro saiu</h2><span class="hint">contas e cartões</span></div>
+          <div class="hbars" id="reportByPay"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Tipo de gasto</h2><span class="hint">fixo, parcelado ou avulso</span></div>
+          <div id="reportKinds"></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Maiores despesas do mês</h2></div>
+        <div id="reportTop"></div>
       </section>
       <div class="donut-tooltip" id="donutTooltip"></div>
     </section>
@@ -581,8 +629,8 @@
   </div>
 </div>
 
-<script src="js/theme.js?v=10"></script>
-<script type="module" src="js/app.js?v=10"></script>
+<script src="js/theme.js?v=11"></script>
+<script type="module" src="js/app.js?v=11"></script>
 <script src="js/register-sw.js"></script>
 </body>
 </html>

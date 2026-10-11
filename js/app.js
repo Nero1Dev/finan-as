@@ -268,8 +268,8 @@ function renderAll() {
   renderSummary();
   renderMonthLabel();
   renderTxList();
-  renderDonut();
   renderCategoryBars();
+  renderReport();
   renderUpcoming();
   renderAccountsGrid();
   renderCardsGrid();
@@ -441,10 +441,10 @@ function categoryVisual(categoryId, kind) {
 }
 
 // totais do mês por categoria (top 5 + "Outras"), do maior pro menor
-function categoryTotals(kind) {
+function categoryTotals(kind, txs = transactions) {
   const colorMap = categoryColorMap(kind);
   const totals = {};
-  for (const t of transactions) {
+  for (const t of txs) {
     if (t.kind !== kind) continue;
     if (t.pays_invoice_id || t.carryover) continue; // as compras já contam; o pagamento contaria duas vezes
     totals[t.category_id] = (totals[t.category_id] || 0) + Number(t.amount);
@@ -464,14 +464,15 @@ function categoryTotals(kind) {
   return entries;
 }
 
-function renderDonut() {
-  renderDonutChart("despesa", "donut");
-  renderDonutChart("receita", "incomeDonut");
+function renderDonut(prevTxs = null) {
+  renderDonutChart("despesa", "donut", prevTxs);
+  renderDonutChart("receita", "incomeDonut", prevTxs);
 }
 
 // desenha um gráfico de rosca por categoria pro tipo `kind`, nos elementos
 // com ids `${prefix}Svg`, `${prefix}Legend`, `${prefix}TotalValue`…
-function renderDonutChart(kind, prefix) {
+// prevTxs (opcional): lançamentos do mês anterior, pra mostrar a variação de cada categoria
+function renderDonutChart(kind, prefix, prevTxs = null) {
   const svg = document.getElementById(prefix + "Svg");
   const legend = document.getElementById(prefix + "Legend");
   const totalEl = document.getElementById(prefix + "TotalValue");
@@ -480,6 +481,7 @@ function renderDonutChart(kind, prefix) {
   if (!svg) return;
 
   const entries = categoryTotals(kind);
+  const prevMap = prevTxs ? categoryAmountsByName(kind, prevTxs) : {};
   svg.innerHTML = "";
   legend.innerHTML = "";
 
@@ -544,7 +546,8 @@ function renderDonutChart(kind, prefix) {
       <span class="swatch" style="background:${e.color}"></span>
       <span class="legend-name">${escapeHtml(e.name)}</span>
       <span class="legend-pct">${e.pct}%</span>
-      <span class="legend-amount">${currency.format(e.amount)}</span>`;
+      <span class="legend-amount">${currency.format(e.amount)}</span>
+      ${prevTxs && e.name !== "Outras" ? deltaHtml(e.amount, prevMap[e.name] || 0, kind === "receita", true) : prevTxs ? "<span></span>" : ""}`;
     legend.appendChild(row);
   }
 }
@@ -587,6 +590,309 @@ document.querySelectorAll("#catToggle [data-kind]").forEach((b) => b.addEventLis
   document.querySelectorAll("#catToggle [data-kind]").forEach((x) => x.classList.toggle("active", x === b));
   renderCategoryBars();
 }));
+
+// ---------- RELATÓRIO FINANCEIRO ----------
+// junta os últimos 6 meses (até o mês em foco) numa consulta só e monta o
+// relatório: indicadores, resumo em texto, evolução, categorias, contas e
+// cartões, tipo de gasto e maiores despesas. Compra no cartão conta pela
+// data da compra (o pagamento da fatura não entra, senão contaria duas vezes).
+const INC_COLOR = "#199E70";
+const EXP_COLOR = "#E0533D";
+const KIND_COLORS = { fixo: "#3987e5", parcelado: "#d95926", avulso: "#199e70" };
+let reportData = null;
+let reportSeq = 0;
+
+function isReportExpense(t) { return t.kind === "despesa" && !t.pays_invoice_id && !t.carryover; }
+function monthShortTitle(d) { const m = MONTHS_SHORT[d.getMonth()]; return m.charAt(0) + m.slice(1).toLowerCase(); }
+
+function categoryAmountsByName(kind, txs) {
+  const map = {};
+  for (const t of txs) {
+    if (t.kind !== kind || t.pays_invoice_id || t.carryover) continue;
+    const name = categories.find((c) => c.id === t.category_id)?.name || "Sem categoria";
+    map[name] = (map[name] || 0) + Number(t.amount);
+  }
+  return map;
+}
+
+// variação contra o mês anterior, com seta + texto (nunca só cor)
+function deltaHtml(cur, prev, goodWhenUp, compact = false) {
+  if (!prev && !cur) return compact ? "<span></span>" : "";
+  if (!prev) return `<span class="delta neutral">novo</span>`;
+  const pct = Math.round(((cur - prev) / Math.abs(prev)) * 100);
+  if (pct === 0) return `<span class="delta neutral">= </span>`;
+  const up = pct > 0;
+  const good = up === goodWhenUp;
+  return `<span class="delta ${good ? "good" : "bad"}">${up ? "▲" : "▼"} ${Math.abs(pct)}%</span>`;
+}
+
+function compactMoney(v) {
+  if (Math.abs(v) >= 1000) return `R$ ${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
+  return `R$ ${Math.round(v)}`;
+}
+
+async function renderReport() {
+  const seq = ++reportSeq;
+  const first = new Date(viewDate.getFullYear(), viewDate.getMonth() - 5, 1);
+  const { end } = monthBounds(viewDate);
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .gte("date", toISODate(first))
+    .lte("date", toISODate(end));
+  if (seq !== reportSeq) return; // trocou de mês no meio: vale a consulta mais nova
+  if (error) { console.error(error); return; }
+  const rows = data || [];
+  const months = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(first.getFullYear(), first.getMonth() + i, 1);
+    const key = referenceMonthKey(d.getFullYear(), d.getMonth());
+    const txs = rows.filter((t) => t.date.slice(0, 7) === key);
+    months.push({
+      key, date: d, label: monthShortTitle(d), txs,
+      inc: sumAmounts(txs.filter((t) => t.kind === "receita")),
+      exp: sumAmounts(txs.filter(isReportExpense)),
+    });
+  }
+  reportData = { months };
+  drawReport();
+}
+
+function drawReport() {
+  if (!reportData) return;
+  const { months } = reportData;
+  const cur = months[5], prev = months[4];
+  document.getElementById("reportPeriod").textContent =
+    `${monthTitle(cur.date)} · comparado com ${MONTHS_LONG[prev.date.getMonth()].toLowerCase()}`;
+  renderKpis(cur, prev);
+  renderInsights(cur, prev, months);
+  drawTrendChart(months);
+  renderTrendTable(months);
+  renderDonut(prev.txs);
+  renderByPay(cur);
+  renderKinds(cur);
+  renderTopExpenses(cur);
+}
+
+function renderKpis(cur, prev) {
+  const result = round2(cur.inc - cur.exp);
+  const prevResult = round2(prev.inc - prev.exp);
+  const rate = cur.inc > 0 ? Math.round((result / cur.inc) * 100) : null;
+  const now = new Date();
+  const isCurrent = cur.date.getFullYear() === now.getFullYear() && cur.date.getMonth() === now.getMonth();
+  const days = isCurrent ? now.getDate() : daysInMonth(cur.date.getFullYear(), cur.date.getMonth());
+  const endISO = toISODate(monthBounds(cur.date).end);
+  const futureInstallments = sumAmounts(cardTransactions.filter((t) => {
+    if (!t.installment_total) return false;
+    const inv = invoices.find((i) => i.id === t.invoice_id);
+    return inv && inv.due_date > endISO;
+  }));
+  const prevLabel = MONTHS_SHORT[prev.date.getMonth()].toLowerCase();
+  const tile = (label, ic, tone, value, sub) => `
+    <div class="kpi">
+      <div class="kpi-head"><span class="kpi-ic ${tone}">${icon(ic, "sm")}</span>${label}</div>
+      <div class="kpi-value ${tone === "exp" || tone === "inc" ? tone : ""}">${value}</div>
+      <div class="kpi-sub">${sub}</div>
+    </div>`;
+  document.getElementById("reportKpis").innerHTML = [
+    tile("Receitas", "in", "inc", currency.format(cur.inc), `${deltaHtml(cur.inc, prev.inc, true)} vs ${prevLabel}`),
+    tile("Despesas", "out", "exp", currency.format(cur.exp), `${deltaHtml(cur.exp, prev.exp, false)} vs ${prevLabel}`),
+    tile("Resultado", "wallet", result >= 0 ? "inc" : "exp", `${result < 0 ? "− " : ""}${currency.format(Math.abs(result))}`,
+      `${result >= 0 ? "sobrou" : "faltou"} · ${prevResult >= 0 ? "sobrou" : "faltou"} ${currency.format(Math.abs(prevResult))} em ${prevLabel}`),
+    tile("Taxa de poupança", "piggy", "acc", rate === null ? "—" : `${rate}%`, "do que entrou e não saiu"),
+    tile("Gasto médio por dia", "calendar", "acc", currency.format(days ? cur.exp / days : 0), `em ${days} ${days === 1 ? "dia" : "dias"}`),
+    tile("Parcelas a vencer", "card", "acc", currency.format(futureInstallments), "em faturas dos próximos meses"),
+  ].join("");
+}
+
+function renderInsights(cur, prev, months) {
+  const items = [];
+  const result = round2(cur.inc - cur.exp);
+  const prevName = MONTHS_LONG[prev.date.getMonth()].toLowerCase();
+  if (cur.inc || cur.exp) {
+    items.push(result >= 0
+      ? ["check", "good", `Sobrou <b>${currency.format(result)}</b> no mês${cur.inc > 0 ? ` — ${Math.round((result / cur.inc) * 100)}% do que entrou` : ""}.`]
+      : ["alert", "bad", `As despesas passaram as receitas em <b>${currency.format(-result)}</b>.`]);
+  }
+  if (prev.exp > 0 && cur.exp > 0) {
+    const diff = round2(cur.exp - prev.exp);
+    const pct = Math.round((Math.abs(diff) / prev.exp) * 100);
+    if (pct >= 1) {
+      items.push(diff < 0
+        ? ["trend", "good", `Você gastou <b>${pct}% menos</b> que em ${prevName} (${currency.format(-diff)} a menos).`]
+        : ["out", "bad", `Você gastou <b>${pct}% mais</b> que em ${prevName} (${currency.format(diff)} a mais).`]);
+    }
+  }
+  const curCats = categoryAmountsByName("despesa", cur.txs);
+  const prevCats = categoryAmountsByName("despesa", prev.txs);
+  const topCat = Object.entries(curCats).sort((a, b) => b[1] - a[1])[0];
+  if (topCat && cur.exp > 0) {
+    items.push(["pie", "neutral", `Maior categoria de gasto: <b>${escapeHtml(topCat[0])}</b>, com ${Math.round((topCat[1] / cur.exp) * 100)}% das despesas.`]);
+  }
+  const rises = Object.entries(curCats)
+    .map(([name, v]) => [name, round2(v - (prevCats[name] || 0))])
+    .filter(([, d]) => d > 0.5)
+    .sort((a, b) => b[1] - a[1]);
+  if (rises.length && prev.exp > 0) {
+    items.push(["out", "bad", `O maior aumento foi em <b>${escapeHtml(rises[0][0])}</b>: ${currency.format(rises[0][1])} a mais que em ${prevName}.`]);
+  }
+  const past = months.slice(0, 5).filter((m) => m.exp > 0);
+  if (past.length >= 2 && cur.exp > 0) {
+    const avg = past.reduce((s, m) => s + m.exp, 0) / past.length;
+    const pct = Math.round(((cur.exp - avg) / avg) * 100);
+    items.push(["chart", pct > 0 ? "bad" : "good",
+      `Média de despesas nos ${past.length} meses anteriores: <b>${currency.format(avg)}</b>. Este mês está ${Math.abs(pct)}% ${pct > 0 ? "acima" : "abaixo"} da média.`]);
+  }
+  const todayISO = toISODate(new Date());
+  const unpaid = sumAmounts(cur.txs.filter((t) => t.kind === "despesa" && !t.paid && !t.card_id && !t.pays_invoice_id));
+  const toReceive = sumAmounts(cur.txs.filter((t) => t.kind === "receita" && t.date > todayISO));
+  if (unpaid > 0 || toReceive > 0) {
+    items.push(["clock", "neutral", `Ainda ${unpaid > 0 ? `falta pagar <b>${currency.format(unpaid)}</b> em contas` : "não há contas a pagar"}${toReceive > 0 ? ` e receber <b>${currency.format(toReceive)}</b>` : ""} neste mês (fora as faturas).`]);
+  }
+  document.getElementById("reportInsights").innerHTML = items.length
+    ? items.map(([ic, tone, html]) => `<li><span class="ins-ic ${tone}">${icon(ic, "sm")}</span><span>${html}</span></li>`).join("")
+    : `<li class="empty">Sem lançamentos neste mês ainda.</li>`;
+}
+
+function niceMax(max) {
+  const raw = max / 4;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * pow).find((s) => s >= raw) || raw;
+  return step * 4;
+}
+
+function drawTrendChart(months) {
+  const el = document.getElementById("trendChart");
+  const W = Math.max(el.clientWidth, 300), H = 240;
+  const padL = 64, padR = 8, padT = 12, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const top = niceMax(Math.max(...months.flatMap((m) => [m.inc, m.exp]), 1));
+  const y = (v) => padT + plotH * (1 - Math.max(v, 0) / top);
+  const groupW = plotW / months.length;
+  const barW = Math.max(6, Math.min(28, (groupW - 20) / 2));
+  const base = padT + plotH;
+  const bar = (x, v, color) => {
+    const yy = y(v), h = base - yy;
+    if (h <= 0.5) return "";
+    const r = Math.min(4, h, barW / 2);
+    return `<path d="M${x} ${base} V${yy + r} Q${x} ${yy} ${x + r} ${yy} H${x + barW - r} Q${x + barW} ${yy} ${x + barW} ${yy + r} V${base} Z" fill="${color}"></path>`;
+  };
+  let svg = "";
+  for (let i = 0; i <= 4; i++) {
+    const v = (top / 4) * i, yy = y(v);
+    svg += `<line x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}" style="stroke:var(--line)" stroke-width="1"></line>`;
+    svg += `<text x="${padL - 10}" y="${yy + 4}" text-anchor="end" class="ax">${compactMoney(v)}</text>`;
+  }
+  months.forEach((m, i) => {
+    const cx = padL + groupW * i + groupW / 2;
+    svg += bar(cx - barW - 1, m.inc, INC_COLOR);
+    svg += bar(cx + 1, m.exp, EXP_COLOR);
+    svg += `<text x="${cx}" y="${H - 8}" text-anchor="middle" class="ax${i === months.length - 1 ? " cur" : ""}">${m.label}</text>`;
+    svg += `<rect class="hit" data-i="${i}" x="${padL + groupW * i}" y="${padT}" width="${groupW}" height="${plotH + padB}" fill="transparent"></rect>`;
+  });
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas e despesas dos últimos 6 meses">${svg}</svg>`;
+  el.querySelectorAll(".hit").forEach((r) => {
+    const m = months[Number(r.dataset.i)];
+    const res = round2(m.inc - m.exp);
+    r.addEventListener("mousemove", (ev) => {
+      const tip = document.getElementById("donutTooltip");
+      tip.innerHTML = `<div class="tt-name">${monthTitle(m.date)}</div>
+        <div class="tt-row"><i style="background:${INC_COLOR}"></i>Receitas <b>${currency.format(m.inc)}</b></div>
+        <div class="tt-row"><i style="background:${EXP_COLOR}"></i>Despesas <b>${currency.format(m.exp)}</b></div>
+        <div class="tt-row">Resultado <b>${res < 0 ? "− " : ""}${currency.format(Math.abs(res))}</b></div>`;
+      tip.style.left = ev.clientX + 14 + "px";
+      tip.style.top = ev.clientY + 14 + "px";
+      tip.classList.add("show");
+      r.setAttribute("fill", "color-mix(in srgb, var(--ink) 4%, transparent)");
+    });
+    r.addEventListener("mouseleave", () => { hideDonutTooltip(); r.setAttribute("fill", "transparent"); });
+  });
+}
+
+function renderTrendTable(months) {
+  document.getElementById("trendTable").innerHTML = `
+    <thead><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr></thead>
+    <tbody>${months.map((m) => {
+      const res = round2(m.inc - m.exp);
+      return `<tr><td>${monthTitle(m.date)}</td><td>${currency.format(m.inc)}</td><td>${currency.format(m.exp)}</td>
+        <td class="${res < 0 ? "neg" : ""}">${res < 0 ? "− " : ""}${currency.format(Math.abs(res))}</td></tr>`;
+    }).join("")}</tbody>`;
+}
+
+function renderByPay(cur) {
+  const el = document.getElementById("reportByPay");
+  const groups = {};
+  for (const t of cur.txs.filter(isReportExpense)) {
+    const key = t.card_id ? "card:" + t.card_id : "acc:" + t.account_id;
+    if (!groups[key]) {
+      if (t.card_id) {
+        const card = cardById(t.card_id);
+        groups[key] = { name: `Cartão ${card?.name || ""}`.trim(), ic: "card", color: cardColor(card), amount: 0 };
+      } else {
+        const acc = accounts.find((a) => a.id === t.account_id);
+        groups[key] = { name: acc?.name || "Conta arquivada", ic: ACCOUNT_ICONS[acc?.type] || "bank", color: "var(--accent)", amount: 0 };
+      }
+    }
+    groups[key].amount += Number(t.amount);
+  }
+  const list = Object.values(groups).filter((g) => g.amount > 0).sort((a, b) => b.amount - a.amount);
+  if (!list.length) { el.innerHTML = `<div class="empty-state small">Nenhuma despesa neste mês.</div>`; return; }
+  const total = list.reduce((s, g) => s + g.amount, 0);
+  const max = list[0].amount;
+  el.innerHTML = list.map((g) => `
+    <div class="hbar">
+      <span class="hbar-ic" style="--c:${g.color}">${icon(g.ic, "sm")}</span>
+      <div class="hbar-main">
+        <div class="hbar-top"><span class="hbar-name">${escapeHtml(g.name)}</span><span class="hbar-val">${currency.format(g.amount)} <span class="hbar-pct">${Math.round((g.amount / total) * 100)}%</span></span></div>
+        <div class="hbar-track"><span style="width:${(g.amount / max) * 100}%;background:${g.color}"></span></div>
+      </div>
+    </div>`).join("");
+}
+
+function renderKinds(cur) {
+  const el = document.getElementById("reportKinds");
+  const exps = cur.txs.filter(isReportExpense);
+  const parts = [
+    { key: "fixo", label: "Fixos", hint: "contas que se repetem todo mês", amount: sumAmounts(exps.filter((t) => t.recurring_id)) },
+    { key: "parcelado", label: "Parcelados", hint: "parcelas de compras", amount: sumAmounts(exps.filter((t) => !t.recurring_id && t.installment_total)) },
+    { key: "avulso", label: "Avulsos", hint: "gastos do dia a dia", amount: sumAmounts(exps.filter((t) => !t.recurring_id && !t.installment_total)) },
+  ];
+  const total = parts.reduce((s, p) => s + Math.max(p.amount, 0), 0);
+  if (total <= 0) { el.innerHTML = `<div class="empty-state small">Nenhuma despesa neste mês.</div>`; return; }
+  el.innerHTML = `
+    <div class="cat-stack">${parts.filter((p) => p.amount > 0).map((p) => `<span style="flex:${p.amount};background:${KIND_COLORS[p.key]}" title="${p.label}"></span>`).join("")}</div>
+    <div class="cat-rows">${parts.map((p) => `
+      <div class="cat-row">
+        <span class="swatch-lg" style="background:${KIND_COLORS[p.key]}"></span>
+        <span class="cat-name">${p.label} <span class="cat-hint">${p.hint}</span></span>
+        <span class="cat-pct">${Math.round((Math.max(p.amount, 0) / total) * 100)}%</span>
+        <span class="cat-val">${currency.format(p.amount)}</span>
+      </div>`).join("")}
+    </div>`;
+}
+
+function renderTopExpenses(cur) {
+  const el = document.getElementById("reportTop");
+  const top = cur.txs.filter(isReportExpense).sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 6);
+  if (!top.length) { el.innerHTML = `<div class="empty-state small">Nenhuma despesa neste mês.</div>`; return; }
+  el.innerHTML = top.map((t) => {
+    const vis = categoryVisual(t.category_id, t.kind);
+    const where = t.card_id ? `Cartão ${cardById(t.card_id)?.name || ""}` : accounts.find((a) => a.id === t.account_id)?.name || "—";
+    const badge = t.installment_total ? `<span class="badge">${t.installment_number}/${t.installment_total}</span>` : t.recurring_id ? `<span class="badge badge-fixa">Fixa</span>` : "";
+    return `<div class="top-row">
+      ${txIconHtml(vis.icon, vis.color)}
+      <div class="tx-main"><div class="desc">${escapeHtml(t.description)}${badge}</div><div class="meta">${fmtDayMonth(t.date)} · ${escapeHtml(where)} · ${escapeHtml(vis.name)}</div></div>
+      <div class="amount">${currency.format(t.amount)}</div>
+    </div>`;
+  }).join("");
+}
+
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (reportData) drawTrendChart(reportData.months); }, 150);
+});
+document.getElementById("printReport").addEventListener("click", () => window.print());
 
 // ---------- PRÓXIMOS VENCIMENTOS ----------
 // despesas de conta pendentes (atrasadas ou nos próximos 7 dias), faturas em
@@ -1704,6 +2010,7 @@ function showTab(tab) {
   });
   closeModal("moreModalOverlay");
   window.scrollTo({ top: 0, behavior: "instant" });
+  if (tab === "graficos" && reportData) drawTrendChart(reportData.months);
 }
 document.querySelectorAll(".nav-item[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.goto)));
@@ -1722,8 +2029,8 @@ async function changeMonth(delta) {
   await loadMonthTransactions();
   renderMonthLabel();
   renderTxList();
-  renderDonut();
   renderCategoryBars();
+  renderReport();
   renderSummary();
 }
 
