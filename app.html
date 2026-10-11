@@ -2,173 +2,312 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Minhas Finanças</title>
+<script>try{var t=localStorage.getItem("financas:theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#110D0A">
+<meta name="theme-color" content="#F6F4EF">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-<div class="grain"></div>
+<body data-tab="dashboard">
 
-<div id="loadingVeil" class="loading-veil"><span class="mono">CARREGANDO…</span></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24"><path d="M4 18l5-6 4 3 7-9M14.5 6H20v5.5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 10h18M7 15h3"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6M5 10v8M10 10v8M14 10v8M19 10v8M3 21h18"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M2 20h20"/></symbol>
+  <symbol id="i-pie" viewBox="0 0 24 24"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2M12 20.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1.5 12h2M20.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6C3.8 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M7 17L17 7M8 7h9v9"/></symbol>
+  <symbol id="i-in" viewBox="0 0 24 24"><path d="M17 7L7 17M16 17H7V8"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 7h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12v3M16 13h.01"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2zM9 8h6M9 12h6"/></symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2.4 11h11.2L21 8H6.2"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M3 13l2-6h14l2 6v4H3zM5 17v2M19 17v2M7 13h.01M17 13h.01"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></symbol>
+  <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 20h20"/></symbol>
+  <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V4h8v3M3 12h18"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></symbol>
+  <symbol id="i-film" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M16 4v16M4 9h4M4 15h4M16 9h4M16 15h4"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/></symbol>
+  <symbol id="i-fork" viewBox="0 0 24 24"><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 0-3 3-3 6s1 4 3 4v8"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01"/></symbol>
+  <symbol id="i-dumbbell" viewBox="0 0 24 24"><path d="M6 6v12M18 6v12M3 9v6M21 9v6M6 12h12"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><path d="M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8C10 4 7 4 7 6s3 2 5 2zm0 0c2-4 5-4 5-2s-3 2-5 2z"/></symbol>
+  <symbol id="i-plane" viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></symbol>
+  <symbol id="i-shirt" viewBox="0 0 24 24"><path d="M8 4L3 7l2 4 3-1v10h8V10l3 1 2-4-5-3a4 4 0 0 1-8 0z"/></symbol>
+  <symbol id="i-percent" viewBox="0 0 24 24"><path d="M19 5L5 19"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></symbol>
+  <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 9v.01M18 15v.01"/></symbol>
+  <symbol id="i-piggy" viewBox="0 0 24 24"><path d="M5 11a7 6 0 0 1 12-3h2l-1 3a6 6 0 0 1 1 3h2v3h-2.5L17 19v2h-3v-1.5h-4V21H7v-2.5A6 6 0 0 1 5 11zM2 9c0 2 1 3 3 3M15 11h.01"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><path d="M3 4h18v4H3zM5 8v12h14V8M10 12h4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2zM12 10v4M12 18h.01"/></symbol>
+</svg>
 
-<header>
-  <div class="logo">FINANÇAS<span>.</span></div>
-  <nav>
-    <span class="mono" id="userLabel"></span>
-    <button class="btn-ghost" id="logoutBtn">SAIR</button>
-  </nav>
-</header>
+<div id="loadingVeil" class="loading-veil">
+  <span class="brand-mark"><svg class="i"><use href="#i-logo"/></svg></span>
+  <span class="mono">CARREGANDO…</span>
+</div>
 
-<main>
-  <div class="eyebrow mono">PAINEL</div>
-  <h1 class="page-title">Visão geral</h1>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark"><svg class="i"><use href="#i-logo"/></svg></span>Finanças</div>
+    <nav class="side-nav" aria-label="Principal">
+      <button class="nav-item active" data-tab="dashboard"><svg class="i"><use href="#i-home"/></svg>Início</button>
+      <button class="nav-item" data-tab="graficos"><svg class="i"><use href="#i-pie"/></svg>Relatórios</button>
+      <button class="nav-item" data-tab="cartoes"><svg class="i"><use href="#i-card"/></svg>Cartões</button>
+      <button class="nav-item" data-tab="contas"><svg class="i"><use href="#i-bank"/></svg>Contas</button>
+      <button class="nav-item" data-tab="fixas"><svg class="i"><use href="#i-repeat"/></svg>Fixos</button>
+    </nav>
+    <div class="side-foot">
+      <div class="user-box">
+        <span class="avatar" id="userAvatar"></span>
+        <span class="user-name" id="userLabel"></span>
+        <button class="icon-btn ghost" id="logoutBtn" aria-label="Sair" title="Sair"><svg class="i"><use href="#i-logout"/></svg></button>
+      </div>
+      <div class="foot-credit">Desenvolvido por <a href="https://github.com/Nero1Dev" target="_blank" rel="noopener">Nero1dev</a></div>
+    </div>
+  </aside>
 
-  <div class="summary-grid" id="summaryGrid"></div>
+  <main class="app-main">
+    <header class="topbar">
+      <div class="topbar-brand"><div class="brand"><span class="brand-mark"><svg class="i"><use href="#i-logo"/></svg></span>Finanças</div></div>
+      <div class="month-nav">
+        <button id="prevMonth" aria-label="Mês anterior"><svg class="i"><use href="#i-chev-l"/></svg></button>
+        <div class="month-label"><svg class="i sm"><use href="#i-calendar"/></svg><span id="monthLabel"></span></div>
+        <button id="nextMonth" aria-label="Próximo mês"><svg class="i"><use href="#i-chev-r"/></svg></button>
+      </div>
+      <label class="search">
+        <svg class="i"><use href="#i-search"/></svg>
+        <input type="search" id="txSearch" placeholder="Buscar lançamento, categoria ou conta" aria-label="Buscar lançamento">
+      </label>
+      <button class="icon-btn" data-theme-toggle aria-label="Alternar tema claro/escuro" title="Alternar tema">
+        <svg class="i theme-moon"><use href="#i-moon"/></svg><svg class="i theme-sun"><use href="#i-sun"/></svg>
+      </button>
+      <button class="btn btn-primary btn-new" id="openNew"><svg class="i"><use href="#i-plus"/></svg>Novo lançamento</button>
+    </header>
 
-  <div class="tabs">
-    <button class="tab active" data-tab="dashboard">Lançamentos</button>
-    <button class="tab" data-tab="graficos">Gráficos</button>
-    <button class="tab" data-tab="contas">Contas</button>
-    <button class="tab" data-tab="cartoes">Cartões</button>
-    <button class="tab" data-tab="fixas">Lançamentos Fixos</button>
+    <!-- ===== INÍCIO ===== -->
+    <section id="tab-dashboard" class="stack">
+      <div class="summary" id="summaryGrid">
+        <div class="hero-card">
+          <div class="hero-top">
+            <div class="hero-label"><span class="hero-chip"><svg class="i sm"><use href="#i-wallet"/></svg></span>SALDO TOTAL HOJE</div>
+            <button class="hero-eye" id="toggleValues" aria-label="Ocultar valores" title="Ocultar valores"><svg class="i sm"><use href="#i-eye"/></svg></button>
+          </div>
+          <div class="hero-value money-sensitive" id="heroValue">—</div>
+          <div class="hero-sub">
+            <span id="heroTrend"></span>
+            <span id="heroForecast"></span>
+            <span id="heroAccounts"></span>
+          </div>
+          <svg class="spark" id="heroSpark" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"></svg>
+        </div>
+        <div class="stat-card">
+          <div class="stat-head"><span class="stat-icon exp"><svg class="i sm"><use href="#i-out"/></svg></span><span class="stat-label">A PAGAR NO MÊS</span></div>
+          <div class="stat-value exp money-sensitive" id="payValue">—</div>
+          <div class="progress exp"><span id="payBar" style="width:0%"></span></div>
+          <div class="stat-foot" id="payFoot"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-head"><span class="stat-icon inc"><svg class="i sm"><use href="#i-in"/></svg></span><span class="stat-label">A RECEBER NO MÊS</span></div>
+          <div class="stat-value inc money-sensitive" id="recValue">—</div>
+          <div class="progress inc"><span id="recBar" style="width:0%"></span></div>
+          <div class="stat-foot" id="recFoot"></div>
+        </div>
+      </div>
+
+      <div class="accounts-strip" id="accountsStrip"></div>
+
+      <div class="dash-grid">
+        <section class="panel">
+          <div class="panel-head"><h2>Próximos vencimentos</h2><span class="hint">atrasados e próximos 7 dias</span></div>
+          <div class="up-list" id="upcomingList"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Para onde foi o dinheiro</h2>
+            <div class="seg-toggle" id="catToggle" role="group" aria-label="Tipo">
+              <button class="active" data-kind="despesa">Despesas</button>
+              <button data-kind="receita">Receitas</button>
+            </div>
+          </div>
+          <div class="cat-stack" id="catStack"></div>
+          <div class="cat-rows" id="catRows"></div>
+          <button class="link-btn" data-goto="graficos">Ver relatório completo →</button>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2 id="txTitle">Lançamentos</h2>
+          <div class="filter-chips" id="txFilters">
+            <button class="f-chip active" data-filter="todos">Todos</button>
+            <button class="f-chip" data-filter="despesa">Despesas</button>
+            <button class="f-chip" data-filter="receita">Receitas</button>
+            <button class="f-chip" data-filter="pendente">Pendentes</button>
+          </div>
+        </div>
+        <div id="txList"></div>
+      </section>
+    </section>
+
+    <!-- ===== RELATÓRIOS ===== -->
+    <section id="tab-graficos" class="stack" style="display:none">
+      <div class="page-head"><h1>Relatórios</h1></div>
+      <section class="panel">
+        <div class="panel-head"><h2>Despesas por categoria</h2></div>
+        <div id="donutEmpty" class="empty-state" style="display:none;">Nenhuma despesa neste mês ainda.</div>
+        <div class="donut-layout" id="donutLayout">
+          <div class="donut-wrap">
+            <svg id="donutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
+            <div class="donut-center">
+              <div class="donut-center-label mono">TOTAL</div>
+              <div class="donut-center-value" id="donutTotalValue"></div>
+            </div>
+          </div>
+          <div class="donut-legend" id="donutLegend"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Receitas por categoria</h2></div>
+        <div id="incomeDonutEmpty" class="empty-state" style="display:none;">Nenhuma receita neste mês ainda.</div>
+        <div class="donut-layout" id="incomeDonutLayout">
+          <div class="donut-wrap">
+            <svg id="incomeDonutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
+            <div class="donut-center">
+              <div class="donut-center-label mono">TOTAL</div>
+              <div class="donut-center-value" id="incomeDonutTotalValue"></div>
+            </div>
+          </div>
+          <div class="donut-legend" id="incomeDonutLegend"></div>
+        </div>
+      </section>
+      <div class="donut-tooltip" id="donutTooltip"></div>
+    </section>
+
+    <!-- ===== CARTÕES ===== -->
+    <section id="tab-cartoes" style="display:none">
+      <div class="page-head">
+        <h1>Cartões</h1>
+        <div class="actions">
+          <button class="btn btn-outline" id="openCardPurchase"><svg class="i"><use href="#i-cart"/></svg>Compra no cartão</button>
+          <button class="btn btn-primary" id="openCard"><svg class="i"><use href="#i-plus"/></svg>Adicionar cartão</button>
+        </div>
+      </div>
+      <div class="card-list" id="cardsGrid"></div>
+    </section>
+
+    <!-- ===== CONTAS ===== -->
+    <section id="tab-contas" style="display:none">
+      <div class="page-head">
+        <h1>Contas</h1>
+        <div class="actions"><button class="btn btn-primary" id="openAccount"><svg class="i"><use href="#i-plus"/></svg>Nova conta</button></div>
+      </div>
+      <div class="item-grid" id="accountsGrid"></div>
+    </section>
+
+    <!-- ===== FIXOS ===== -->
+    <section id="tab-fixas" style="display:none">
+      <div class="page-head">
+        <h1>Lançamentos fixos</h1>
+        <div class="actions"><button class="btn btn-primary" id="openRecurring"><svg class="i"><use href="#i-plus"/></svg>Novo fixo</button></div>
+      </div>
+      <div class="item-grid" id="recurringGrid"></div>
+    </section>
+  </main>
+</div>
+
+<nav class="bottom-nav" aria-label="Principal">
+  <button class="nav-item active" data-tab="dashboard"><svg class="i"><use href="#i-home"/></svg>Início</button>
+  <button class="nav-item" data-tab="graficos"><svg class="i"><use href="#i-pie"/></svg>Relatórios</button>
+  <button class="fab" id="openNewFab" aria-label="Novo lançamento"><svg class="i"><use href="#i-plus"/></svg></button>
+  <button class="nav-item" data-tab="cartoes"><svg class="i"><use href="#i-card"/></svg>Cartões</button>
+  <button class="nav-item" id="openMore" data-more><svg class="i"><use href="#i-grid"/></svg>Mais</button>
+</nav>
+
+<!-- ===== MODAL: MAIS (celular) ===== -->
+<div class="modal-overlay" id="moreModalOverlay">
+  <div class="modal">
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+    <h2>Mais</h2>
+    <div class="more-list">
+      <button class="nav-item" data-tab="contas"><svg class="i"><use href="#i-bank"/></svg>Contas</button>
+      <button class="nav-item" data-tab="fixas"><svg class="i"><use href="#i-repeat"/></svg>Lançamentos fixos</button>
+      <button class="nav-item" data-theme-toggle><svg class="i theme-moon"><use href="#i-moon"/></svg><svg class="i theme-sun"><use href="#i-sun"/></svg><span class="theme-label">Tema escuro</span></button>
+      <button class="nav-item" id="logoutBtnMobile"><svg class="i"><use href="#i-logout"/></svg>Sair</button>
+    </div>
+    <div class="foot-credit" style="margin-top:18px">Desenvolvido por <a href="https://github.com/Nero1Dev" target="_blank" rel="noopener">Nero1dev</a></div>
   </div>
+</div>
 
-  <!-- ===== TAB: DASHBOARD ===== -->
-  <section id="tab-dashboard">
-    <div class="action-bar">
-      <div class="month-nav">
-        <button id="prevMonth">‹</button>
-        <div class="month-label display" id="monthLabel"></div>
-        <button id="nextMonth">›</button>
-      </div>
-      <div class="actions">
-        <button class="btn btn-outline" id="openTxReceita">+ Receita</button>
-        <button class="btn btn-primary" id="openTxDespesa">+ Despesa</button>
-      </div>
-    </div>
-    <div id="txList"></div>
-  </section>
-
-  <!-- ===== TAB: GRÁFICOS ===== -->
-  <section id="tab-graficos" style="display:none">
-    <div class="action-bar">
-      <div class="month-nav">
-        <button id="prevMonth2">‹</button>
-        <div class="month-label display" id="monthLabel2"></div>
-        <button id="nextMonth2">›</button>
-      </div>
-      <div></div>
-    </div>
-
-    <div class="eyebrow mono" style="margin-top:8px;">DESPESAS POR CATEGORIA</div>
-
-    <div id="donutEmpty" class="empty-state" style="display:none;">Nenhuma despesa neste mês ainda.</div>
-
-    <div class="donut-layout" id="donutLayout">
-      <div class="donut-wrap">
-        <svg id="donutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
-        <div class="donut-center">
-          <div class="donut-center-label mono">TOTAL</div>
-          <div class="donut-center-value" id="donutTotalValue"></div>
-        </div>
-      </div>
-      <div class="donut-legend" id="donutLegend"></div>
-    </div>
-
-    <div class="eyebrow mono" style="margin-top:40px;">RECEITAS POR CATEGORIA</div>
-
-    <div id="incomeDonutEmpty" class="empty-state" style="display:none;">Nenhuma receita neste mês ainda.</div>
-
-    <div class="donut-layout" id="incomeDonutLayout">
-      <div class="donut-wrap">
-        <svg id="incomeDonutSvg" viewBox="0 0 180 180" width="220" height="220"></svg>
-        <div class="donut-center">
-          <div class="donut-center-label mono">TOTAL</div>
-          <div class="donut-center-value" id="incomeDonutTotalValue"></div>
-        </div>
-      </div>
-      <div class="donut-legend" id="incomeDonutLegend"></div>
-    </div>
-    <div class="donut-tooltip" id="donutTooltip"></div>
-  </section>
-
-  <!-- ===== TAB: CONTAS ===== -->
-  <section id="tab-contas" style="display:none">
-    <div class="action-bar">
-      <div></div>
-      <div class="actions">
-        <button class="btn btn-primary" id="openAccount">+ Conta</button>
-      </div>
-    </div>
-    <div class="item-grid" id="accountsGrid"></div>
-  </section>
-
-  <!-- ===== TAB: CARTÕES ===== -->
-  <section id="tab-cartoes" style="display:none">
-    <div class="action-bar">
-      <div></div>
-      <div class="actions">
-        <button class="btn btn-outline" id="openCardPurchase">+ Compra no Cartão</button>
-        <button class="btn btn-primary" id="openCard">+ Cartão</button>
-      </div>
-    </div>
-    <div class="card-list" id="cardsGrid"></div>
-  </section>
-
-  <!-- ===== TAB: FIXAS ===== -->
-  <section id="tab-fixas" style="display:none">
-    <div class="action-bar">
-      <div></div>
-      <div class="actions">
-        <button class="btn btn-primary" id="openRecurring">+ Lançamento Fixo</button>
-      </div>
-    </div>
-    <div class="item-grid" id="recurringGrid"></div>
-  </section>
-</main>
-
-<footer>
-  MINHAS FINANÇAS — DADOS PRIVADOS, SINCRONIZADOS NA NUVEM
-  <div class="foot-credit">Desenvolvido por <a href="https://github.com/Nero1Dev" target="_blank">Nero1dev</a></div>
-</footer>
-
-<!-- ===== MODAL: LANÇAMENTO SIMPLES (receita/despesa) ===== -->
+<!-- ===== MODAL: LANÇAMENTO SIMPLES (receita) ===== -->
 <div class="modal-overlay" id="txModalOverlay">
   <div class="modal">
-    <button class="modal-close" data-close>&times;</button>
-    <h2 id="txModalTitle">Nova despesa</h2>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+    <h2 id="txModalTitle">Nova receita</h2>
+    <div class="type-switch" id="txTypeSwitch" role="tablist" aria-label="Tipo de lançamento">
+      <button type="button" data-type="despesa"><svg class="i sm"><use href="#i-out"/></svg>Despesa</button>
+      <button type="button" data-type="receita" class="active"><svg class="i sm"><use href="#i-in"/></svg>Receita</button>
+      <button type="button" data-type="fixo"><svg class="i sm"><use href="#i-repeat"/></svg>Fixo</button>
+    </div>
     <form id="txForm">
       <input type="hidden" id="txId" value="">
       <input type="hidden" id="txKind" value="despesa">
       <div class="field">
-        <label>Descrição</label>
-        <input type="text" id="txDesc" required>
+        <label for="txDesc">Descrição</label>
+        <input type="text" id="txDesc" required placeholder="Ex: Salário, Freela">
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Valor (R$)</label>
+          <label for="txAmount">Valor (R$)</label>
           <input type="text" inputmode="decimal" class="money-input" id="txAmount" placeholder="0,00" required>
         </div>
         <div class="field">
-          <label>Data</label>
+          <label for="txDate">Data</label>
           <input type="date" id="txDate" required>
         </div>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Conta</label>
+          <label for="txAccount">Conta</label>
           <select id="txAccount" required></select>
         </div>
         <div class="field">
-          <label>Categoria</label>
+          <label for="txCategory">Categoria</label>
           <select id="txCategory" required></select>
         </div>
       </div>
@@ -182,11 +321,16 @@
 <!-- ===== MODAL: DESPESA (conta ou cartão, à vista ou parcelada) ===== -->
 <div class="modal-overlay" id="expenseModalOverlay">
   <div class="modal">
-    <button class="modal-close" data-close>&times;</button>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
     <h2 id="expModalTitle">Nova despesa</h2>
+    <div class="type-switch" id="expTypeSwitch" role="tablist" aria-label="Tipo de lançamento">
+      <button type="button" data-type="despesa" class="active"><svg class="i sm"><use href="#i-out"/></svg>Despesa</button>
+      <button type="button" data-type="receita"><svg class="i sm"><use href="#i-in"/></svg>Receita</button>
+      <button type="button" data-type="fixo"><svg class="i sm"><use href="#i-repeat"/></svg>Fixo</button>
+    </div>
     <form id="expenseForm">
       <div class="field">
-        <label>Descrição</label>
+        <label for="expDesc">Descrição</label>
         <input type="text" id="expDesc" required placeholder="Ex: Mercado, Notebook">
       </div>
       <div class="field">
@@ -201,11 +345,11 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label id="expAmountLabel">Valor (R$)</label>
+          <label id="expAmountLabel" for="expAmount">Valor (R$)</label>
           <input type="text" inputmode="decimal" class="money-input" id="expAmount" placeholder="0,00" required>
         </div>
         <div class="field" id="expCountField">
-          <label>Parcelas</label>
+          <label for="expCount">Parcelas</label>
           <input type="number" id="expCount" min="1" max="60" value="1" required>
         </div>
       </div>
@@ -217,16 +361,16 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label id="expDateLabel">Data</label>
+          <label id="expDateLabel" for="expDate">Data</label>
           <input type="date" id="expDate" required>
         </div>
         <div class="field">
-          <label>Categoria</label>
+          <label for="expCategory">Categoria</label>
           <select id="expCategory" required></select>
         </div>
       </div>
       <p class="field-hint warn" id="expCategoryHint" style="display:none">
-        Pra pagar fatura de cartão, use o botão PAGAR na própria fatura. Lançar aqui faz o valor contar duas vezes.
+        Pra pagar fatura de cartão, use o botão Pagar na própria fatura. Lançar aqui faz o valor contar duas vezes.
       </p>
       <div class="preview-box" id="expPreview" style="display:none"></div>
       <div class="modal-actions">
@@ -239,7 +383,7 @@
 <!-- ===== MODAL: COMPRA PARCELADA (ver / editar / excluir parcelas) ===== -->
 <div class="modal-overlay" id="groupModalOverlay">
   <div class="modal modal-wide">
-    <button class="modal-close" data-close>&times;</button>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
     <div id="groupBody"></div>
   </div>
 </div>
@@ -247,7 +391,7 @@
 <!-- ===== MODAL: FATURA (detalhe) ===== -->
 <div class="modal-overlay" id="invoiceModalOverlay">
   <div class="modal modal-wide">
-    <button class="modal-close" data-close>&times;</button>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
     <div id="invoiceBody"></div>
   </div>
 </div>
@@ -255,22 +399,22 @@
 <!-- ===== MODAL: PAGAR FATURA ===== -->
 <div class="modal-overlay" id="payModalOverlay">
   <div class="modal">
-    <button class="modal-close" data-close>&times;</button>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
     <h2 id="payModalTitle">Pagar fatura</h2>
     <p class="field-hint" id="payInfo"></p>
     <form id="payForm">
       <div class="field-row">
         <div class="field">
-          <label>Valor pago (R$)</label>
+          <label for="payAmount">Valor pago (R$)</label>
           <input type="text" inputmode="decimal" class="money-input" id="payAmount" placeholder="0,00" required>
         </div>
         <div class="field">
-          <label>Data do pagamento</label>
+          <label for="payDate">Data do pagamento</label>
           <input type="date" id="payDate" required>
         </div>
       </div>
       <div class="field">
-        <label>Saiu da conta</label>
+        <label for="payAccount">Saiu da conta</label>
         <select id="payAccount" required></select>
       </div>
       <div class="field" id="payCarryField" style="display:none">
@@ -289,12 +433,12 @@
 <!-- ===== MODAL: ADICIONAR VALOR A LANÇAMENTO EXISTENTE ===== -->
 <div class="modal-overlay" id="addValueModalOverlay">
   <div class="modal">
-    <button class="modal-close" data-close>&times;</button>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
     <h2>Adicionar valor</h2>
-    <p class="mono" id="addValueDesc" style="color:var(--bone-dim);font-size:12px;margin-bottom:16px;"></p>
+    <p class="field-hint" id="addValueDesc" style="margin-top:-8px"></p>
     <form id="addValueForm">
       <div class="field">
-        <label>Valor a somar (R$)</label>
+        <label for="addValueAmount">Valor a somar (R$)</label>
         <input type="text" inputmode="decimal" class="money-input" id="addValueAmount" placeholder="0,00" required autofocus>
       </div>
       <div class="modal-actions">
@@ -317,19 +461,19 @@
   </div>
 </div>
 
-<!-- ===== MODAL: CONTA / CARTÃO ===== -->
+<!-- ===== MODAL: CONTA ===== -->
 <div class="modal-overlay" id="accountModalOverlay">
   <div class="modal">
-    <button class="modal-close" data-close>&times;</button>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
     <h2>Conta</h2>
     <form id="accountForm">
       <input type="hidden" id="accountId">
       <div class="field">
-        <label>Nome</label>
+        <label for="accountName">Nome</label>
         <input type="text" id="accountName" required placeholder="Ex: Nubank, Carteira, Poupança">
       </div>
       <div class="field">
-        <label>Tipo</label>
+        <label for="accountType">Tipo</label>
         <select id="accountType" required>
           <option value="corrente">Conta corrente</option>
           <option value="poupanca">Poupança</option>
@@ -347,35 +491,40 @@
 <!-- ===== MODAL: LANÇAMENTO FIXO (receita ou despesa) ===== -->
 <div class="modal-overlay" id="recurringModalOverlay">
   <div class="modal">
-    <button class="modal-close" data-close>&times;</button>
-    <h2 id="recurringModalTitle">Lançamento Fixo Mensal</h2>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+    <h2 id="recurringModalTitle">Lançamento fixo mensal</h2>
+    <div class="type-switch" id="recTypeSwitch" role="tablist" aria-label="Tipo de lançamento">
+      <button type="button" data-type="despesa"><svg class="i sm"><use href="#i-out"/></svg>Despesa</button>
+      <button type="button" data-type="receita"><svg class="i sm"><use href="#i-in"/></svg>Receita</button>
+      <button type="button" data-type="fixo" class="active"><svg class="i sm"><use href="#i-repeat"/></svg>Fixo</button>
+    </div>
     <form id="recurringForm">
       <input type="hidden" id="recurringId" value="">
       <div class="kind-toggle" id="recKindToggle">
-        <button type="button" data-kind="despesa" class="active">Despesa</button>
-        <button type="button" data-kind="receita">Receita</button>
+        <button type="button" data-kind="despesa" class="active">Despesa fixa</button>
+        <button type="button" data-kind="receita">Receita fixa</button>
       </div>
       <div class="field">
-        <label>Descrição</label>
+        <label for="recDesc">Descrição</label>
         <input type="text" id="recDesc" required placeholder="Ex: Aluguel, Internet">
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Valor (R$)</label>
+          <label for="recAmount">Valor (R$)</label>
           <input type="text" inputmode="decimal" class="money-input" id="recAmount" placeholder="0,00" required>
         </div>
         <div class="field">
-          <label>Todo dia</label>
+          <label for="recDay">Todo dia</label>
           <input type="number" id="recDay" min="1" max="28" value="5" required>
         </div>
       </div>
       <div class="field-row">
         <div class="field">
-          <label id="recPayLabel">Pagar com</label>
+          <label id="recPayLabel" for="recPay">Pagar com</label>
           <select id="recPay" required></select>
         </div>
         <div class="field">
-          <label>Categoria</label>
+          <label for="recCategory">Categoria</label>
           <select id="recCategory" required></select>
         </div>
       </div>
@@ -392,37 +541,37 @@
 <!-- ===== MODAL: CARTÃO ===== -->
 <div class="modal-overlay" id="cardModalOverlay">
   <div class="modal">
-    <button class="modal-close" data-close>&times;</button>
-    <h2 id="cardModalTitle">Cartão de Crédito</h2>
+    <button class="modal-close" data-close aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+    <h2 id="cardModalTitle">Cartão de crédito</h2>
     <form id="cardForm">
       <input type="hidden" id="cardId" value="">
       <div class="field">
-        <label>Nome</label>
+        <label for="cardName">Nome</label>
         <input type="text" id="cardName" required placeholder="Ex: Nubank, Inter">
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Bandeira</label>
+          <label for="cardBrand">Bandeira</label>
           <input type="text" id="cardBrand" placeholder="Ex: Visa, Mastercard">
         </div>
         <div class="field">
-          <label>Limite (R$)</label>
+          <label for="cardLimit">Limite (R$)</label>
           <input type="text" inputmode="decimal" class="money-input" id="cardLimit" placeholder="opcional">
         </div>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Dia de fechamento</label>
+          <label for="cardClosingDay">Dia de fechamento</label>
           <input type="number" id="cardClosingDay" min="1" max="28" value="25" required>
         </div>
         <div class="field">
-          <label>Dia de vencimento</label>
+          <label for="cardDueDay">Dia de vencimento</label>
           <input type="number" id="cardDueDay" min="1" max="28" value="5" required>
         </div>
       </div>
       <p class="field-hint" id="cardDaysHint"></p>
       <div class="field">
-        <label>Conta usada para pagar a fatura</label>
+        <label for="cardPaymentAccount">Conta usada para pagar a fatura</label>
         <select id="cardPaymentAccount" required></select>
       </div>
       <div class="modal-actions">
@@ -432,6 +581,7 @@
   </div>
 </div>
 
+<script src="js/theme.js"></script>
 <script type="module" src="js/app.js"></script>
 <script src="js/register-sw.js"></script>
 </body>

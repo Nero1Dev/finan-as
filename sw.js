@@ -1,4 +1,4 @@
-const CACHE_NAME = "financas-cache-v8";
+const CACHE_NAME = "financas-cache-v9";
 
 const APP_SHELL = [
   "/",
@@ -12,7 +12,10 @@ const APP_SHELL = [
   "/js/auth.js",
   "/js/profile.js",
   "/js/supabaseClient.js",
+  "/js/theme.js",
+  "/js/register-sw.js",
   "/favicon.ico",
+  "/favicon.svg",
   "/favicon-16.png",
   "/favicon-32.png",
   "/apple-touch-icon.png",

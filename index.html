@@ -2,83 +2,114 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Minhas Finanças — Entrar</title>
+<script>try{var t=localStorage.getItem("financas:theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#110D0A">
+<meta name="theme-color" content="#F6F4EF">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<div class="grain"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24"><path d="M4 18l5-6 4 3 7-9M14.5 6H20v5.5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2M12 20.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1.5 12h2M20.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+</svg>
 
 <div class="auth-wrap">
-  <div class="auth-box">
-    <div class="logo">FINANÇAS<span>.</span></div>
-    <div class="sub mono">CONTROLE FINANCEIRO PESSOAL</div>
-
-    <div id="authMsg" class="auth-msg"></div>
-
-    <form id="authForm" novalidate>
-      <div class="field collapsible" id="usernameField">
-        <label for="username">Nome de usuário</label>
-        <input type="text" id="username" autocomplete="username" placeholder="ex: nairon">
-      </div>
-
-      <div class="field">
-        <label for="identifier" id="identifierLabel">E-mail ou usuário</label>
-        <input type="text" id="identifier" required autocomplete="username">
-      </div>
-
-      <div class="field">
-        <label for="password">Senha</label>
-        <div class="password-wrap">
-          <input type="password" id="password" required minlength="8" autocomplete="current-password">
-          <button type="button" id="togglePassword" class="toggle-pw">MOSTRAR</button>
-        </div>
-        <div class="pw-strength collapsible" id="pwStrengthWrap">
-          <div class="pw-strength-bars">
-            <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
-          </div>
-          <div class="pw-strength-label mono" id="pwStrengthLabel"></div>
-        </div>
-      </div>
-
-      <div class="field collapsible" id="confirmField">
-        <label for="confirmPassword">Confirmar senha</label>
-        <div class="password-wrap">
-          <input type="password" id="confirmPassword" autocomplete="new-password">
-          <button type="button" id="toggleConfirmPassword" class="toggle-pw">MOSTRAR</button>
-        </div>
-      </div>
-
-      <button type="submit" id="authSubmit" class="btn btn-primary btn-block">Entrar</button>
-    </form>
-
-    <div class="divider"><span>ou</span></div>
-
-    <button type="button" id="googleBtn" class="btn btn-google btn-block">
-      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-        <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.87 2.7-6.62z"/>
-        <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.98v2.33A9 9 0 0 0 9 18z"/>
-        <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.98A9 9 0 0 0 0 9c0 1.45.35 2.83.98 4.03l2.97-2.33z"/>
-        <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .98 4.97l2.97 2.33C4.66 5.17 6.65 3.58 9 3.58z"/>
-      </svg>
-      Continuar com o Google
-    </button>
-
-    <div class="toggle-row">
-      <a href="#" id="modeToggle">Criar uma conta</a>
+  <section class="auth-hero">
+    <svg class="auth-shapes" viewBox="0 0 420 420" aria-hidden="true">
+      <circle cx="270" cy="150" r="110" fill="#5B4BDB"/>
+      <circle cx="140" cy="260" r="70" fill="#E0533D"/>
+      <circle cx="330" cy="320" r="46" fill="#199E70"/>
+      <circle cx="110" cy="90" r="24" fill="#D98E04"/>
+    </svg>
+    <div class="brand"><span class="brand-mark"><svg class="i"><use href="#i-logo"/></svg></span>Finanças</div>
+    <div>
+      <h1>Seu dinheiro, mês a mês, em um lugar só.</h1>
+      <p class="auth-tag">Contas, cartões, faturas e lançamentos fixos sincronizados na nuvem.</p>
     </div>
-  </div>
-  <div class="foot-credit foot-credit-fixed">Desenvolvido por <a href="https://github.com/Nero1Dev" target="_blank">Nero1dev</a></div>
+    <div class="auth-tag" style="font-size:13px;color:#CFC8F5;position:relative">Dados privados, só seus.</div>
+  </section>
+
+  <section class="auth-side">
+    <button class="icon-btn auth-theme" data-theme-toggle aria-label="Alternar tema claro/escuro" title="Alternar tema">
+      <svg class="i theme-moon"><use href="#i-moon"/></svg><svg class="i theme-sun"><use href="#i-sun"/></svg>
+    </button>
+    <div class="auth-box">
+      <div class="auth-tabs" role="tablist" aria-label="Acesso">
+        <button type="button" role="tab" data-mode="login" class="active">Entrar</button>
+        <button type="button" role="tab" data-mode="signup">Criar conta</button>
+      </div>
+
+      <div id="authMsg" class="auth-msg"></div>
+
+      <form id="authForm" novalidate>
+        <div class="field collapsible" id="usernameField">
+          <label for="username">Nome de usuário</label>
+          <input type="text" id="username" autocomplete="username" placeholder="ex: nairon">
+        </div>
+
+        <div class="field">
+          <label for="identifier" id="identifierLabel">E-mail ou usuário</label>
+          <input type="text" id="identifier" required autocomplete="username">
+        </div>
+
+        <div class="field">
+          <label for="password">Senha</label>
+          <div class="password-wrap">
+            <input type="password" id="password" required minlength="8" autocomplete="current-password">
+            <button type="button" id="togglePassword" class="toggle-pw">Mostrar</button>
+          </div>
+          <div class="pw-strength collapsible" id="pwStrengthWrap">
+            <div class="pw-strength-bars">
+              <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
+            </div>
+            <div class="pw-strength-label" id="pwStrengthLabel"></div>
+          </div>
+        </div>
+
+        <div class="field collapsible" id="confirmField">
+          <label for="confirmPassword">Confirmar senha</label>
+          <div class="password-wrap">
+            <input type="password" id="confirmPassword" autocomplete="new-password">
+            <button type="button" id="toggleConfirmPassword" class="toggle-pw">Mostrar</button>
+          </div>
+        </div>
+
+        <button type="submit" id="authSubmit" class="btn btn-primary btn-block">Entrar</button>
+      </form>
+
+      <div class="divider"><span>ou</span></div>
+
+      <button type="button" id="googleBtn" class="btn btn-google btn-block">
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.87 2.7-6.62z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.98v2.33A9 9 0 0 0 9 18z"/>
+          <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.98A9 9 0 0 0 0 9c0 1.45.35 2.83.98 4.03l2.97-2.33z"/>
+          <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .98 4.97l2.97 2.33C4.66 5.17 6.65 3.58 9 3.58z"/>
+        </svg>
+        Continuar com o Google
+      </button>
+
+      <div class="toggle-row">
+        <a href="#" id="modeToggle">Criar uma conta</a>
+      </div>
+      <div class="foot-credit foot-credit-fixed">Desenvolvido por <a href="https://github.com/Nero1Dev" target="_blank" rel="noopener">Nero1dev</a></div>
+    </div>
+  </section>
 </div>
 
+<script src="js/theme.js"></script>
 <script type="module" src="js/auth.js"></script>
 <script src="js/register-sw.js"></script>
 </body>

@@ -4,32 +4,35 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Página não encontrada — Minhas Finanças</title>
+<script>try{var t=localStorage.getItem("financas:theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#110D0A">
+<meta name="theme-color" content="#F6F4EF">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<div class="grain"></div>
 
-<div class="auth-wrap">
-  <div class="auth-box error-box">
-    <div class="logo">FINANÇAS<span>.</span></div>
-    <div class="error-code display">404</div>
-    <div class="sub mono">PÁGINA NÃO ENCONTRADA</div>
+<div class="error-wrap">
+  <div class="error-box">
+    <div class="brand"><span class="brand-mark"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-6 4 3 7-9M14.5 6H20v5.5"/></svg></span>Finanças</div>
+    <div class="error-code">404</div>
+    <div class="eyebrow sub">PÁGINA NÃO ENCONTRADA</div>
     <p class="error-msg">
       Essa página saiu do orçamento deste mês. Procuramos no extrato,
       no cartão e até debaixo do colchão — não encontramos nada aqui.
     </p>
     <a href="/" class="btn btn-primary btn-block">Voltar para o início</a>
+    <div class="foot-credit" style="margin-top:22px">Desenvolvido por <a href="https://github.com/Nero1Dev" target="_blank" rel="noopener">Nero1dev</a></div>
   </div>
-  <div class="foot-credit foot-credit-fixed">Desenvolvido por <a href="https://github.com/Nero1Dev" target="_blank">Nero1dev</a></div>
 </div>
 
+<script src="js/theme.js"></script>
 </body>
 </html>

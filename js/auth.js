@@ -28,7 +28,7 @@ function wireToggle(btn, input) {
   btn.addEventListener("click", () => {
     const showing = input.type === "text";
     input.type = showing ? "password" : "text";
-    btn.textContent = showing ? "MOSTRAR" : "OCULTAR";
+    btn.textContent = showing ? "Mostrar" : "Ocultar";
   });
 }
 wireToggle(togglePasswordBtn, passwordInput);
@@ -96,6 +96,13 @@ modeToggle.addEventListener("click", (e) => {
   mode = mode === "login" ? "signup" : "login";
   applyMode();
 });
+document.querySelectorAll(".auth-tabs [data-mode]").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    if (mode === tab.dataset.mode) return;
+    mode = tab.dataset.mode;
+    applyMode();
+  });
+});
 
 function applyMode() {
   const isSignup = mode === "signup";
@@ -111,6 +118,11 @@ function applyMode() {
 
   submitBtn.textContent = isSignup ? "Criar conta" : "Entrar";
   modeToggle.textContent = isSignup ? "Já tenho conta" : "Criar uma conta";
+  document.querySelectorAll(".auth-tabs [data-mode]").forEach((tab) => {
+    const active = tab.dataset.mode === mode;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
   clearMsg();
 }
 applyMode();
